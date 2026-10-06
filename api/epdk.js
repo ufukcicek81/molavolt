@@ -87,16 +87,18 @@ export default async function handler(req, res) {
   function priceValue(o) {
     if (!o || typeof o !== "object") return NaN;
     const direct = firstValue(o, [
-      "soketFiyati", "soketFiyat", "birimFiyat", "birimFiyatTl", "birimFiyatTL",
-      "sarjHizmetiFiyati", "sarjHizmetiFiyat", "hizmetFiyati", "hizmetFiyat",
-      "fiyat", "fiyatTl", "fiyatTL", "price", "tarife", "ucret", "ücret"
+      "soketFiyati", "soketFiyat", "soketBirimFiyati", "soketBirimFiyat",
+      "birimFiyat", "birimFiyatTl", "birimFiyatTL", "birimEnerjiFiyati",
+      "sarjHizmetiFiyati", "sarjHizmetiFiyat", "sarjHizmetiBirimFiyati",
+      "hizmetFiyati", "hizmetFiyat", "fiyat", "fiyatTl", "fiyatTL",
+      "price", "unitPrice", "tarife", "ucret", "ücret", "kwhFiyat", "kWhFiyat"
     ]);
     const n = num(direct);
     return Number.isFinite(n) ? n : NaN;
   }
 
   function power(o) {
-    return firstValue(o, ["soketGucu", "soketGücü", "guc", "güç", "kw", "power", "gucKw"]);
+    return firstValue(o, ["soketGucu", "soketGücü", "guc", "güç", "kw", "power", "gucKw", "maxGuc"]);
   }
 
   function addPriceToPower(p, price) {
@@ -112,19 +114,28 @@ export default async function handler(req, res) {
     const brand = firstValue(r, [
       "markaAdi", "marka", "tescilliMarka", "markaAd", "sarjAgiMarka",
       "sarjAgiIsletmecisiMarka", "saglayiciMarka", "operatorMarka",
-      "sarjAgiIsletmecisiUnvan", "sarjIstasyonuIsletmecisi"
+      "sarjAgiIsletmecisi", "sarjAgiIsletmecisiUnvan",
+      "sarjIstasyonuIsletmecisi", "sarjIstasyonuIsletmecisiUnvan",
+      "hizmetSaglayici", "hizmetSaglayiciAdi", "isletmeci", "isletmeciUnvan"
     ]);
     if (brand) {
       r.marka = String(brand).trim();
       r.markaAdi = String(brand).trim();
+      r.sarjAgiMarka = String(brand).trim();
     }
 
-    const socketKey = ["soketler", "sockets", "socketler", "sarjSoketleri", "sarjIstasyonuSoketleri", "sarjUniteleri"]
+    const stationPrice = priceValue(r);
+    if (Number.isFinite(stationPrice)) {
+      r.fiyat = stationPrice;
+      r.fiyatTl = stationPrice;
+      r.birimFiyat = stationPrice;
+    }
+
+    const socketKey = ["soketler", "sockets", "socketler", "sarjSoketleri", "sarjIstasyonuSoketleri", "sarjUniteleri", "soketBilgileri"]
       .find(k => r[k] !== undefined && r[k] !== null);
     let sockets = socketKey ? parseMaybe(r[socketKey]) : [];
     if (!Array.isArray(sockets)) sockets = sockets ? [sockets] : [];
 
-    const stationPrice = priceValue(r);
     if (sockets.length) {
       r.soketler = sockets.map((rawSocket) => {
         const s = typeof rawSocket === "object" ? {...rawSocket} : {soketTipi: String(rawSocket)};
@@ -134,12 +145,13 @@ export default async function handler(req, res) {
         if (Number.isFinite(p)) {
           s.soketFiyati = p;
           s.birimFiyat = p;
+          s.birimFiyatTl = p;
           s.fiyat = p;
         }
         return s;
       });
     } else if (Number.isFinite(stationPrice)) {
-      r.soketler = [{soketGucu:`${stationPrice.toFixed(2)} TL/kWh`,soketFiyati:stationPrice,birimFiyat:stationPrice}];
+      r.soketler = [{soketGucu:`${stationPrice.toFixed(2)} TL/kWh`,soketFiyati:stationPrice,birimFiyat:stationPrice,birimFiyatTl:stationPrice}];
     }
     return r;
   }
