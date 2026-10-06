@@ -2,7 +2,7 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  res.setHeader("Cache-Control", "no-store");
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
   res.setHeader("Content-Type", "application/json; charset=utf-8");
 
   if (req.method === "OPTIONS") return res.status(204).end();
@@ -11,12 +11,12 @@ export default async function handler(req, res) {
 
   function epdkRequest(bodyValue, label) {
     return new Promise((resolve) => {
-      const body = bodyValue;
+      const body = typeof bodyValue === "string" ? bodyValue : JSON.stringify(bodyValue);
       const headers = {
         Accept: "application/json,text/plain,*/*",
         "Content-Type": "application/json",
         "Content-Length": Buffer.byteLength(body),
-        "User-Agent": "MolaVolt/1.0"
+        "User-Agent": "Mozilla/5.0 MolaVolt/1.1"
       };
       const options = {
         hostname: "apigateway.epdk.gov.tr",
@@ -27,6 +27,7 @@ export default async function handler(req, res) {
       };
       const request = https.request(options, (response) => {
         let data = "";
+        response.setEncoding("utf8");
         response.on("data", chunk => { data += chunk; });
         response.on("end", () => {
           let json = null;
@@ -46,29 +47,73 @@ export default async function handler(req, res) {
     });
   }
 
-  function getRows(json) {
-    if (!json) return [];
-    if (Array.isArray(json)) return json;
-    if (Array.isArray(json.result)) return json.result;
-    if (json.result && Array.isArray(json.result.rows)) return json.result.rows;
-    if (json.data && Array.isArray(json.data)) return json.data;
-    if (json.data && Array.isArray(json.data.result)) return json.data.result;
-    return [];
-  }
-
-  function rowObject(row, cols) {
-    if (!Array.isArray(row)) return row || {};
-    const o = {};
-    (cols || []).forEach((c, i) => o[c] = row[i]);
-    return o;
-  }
-
   function parseMaybe(v) {
     if (typeof v !== "string") return v;
     const t = v.trim();
     if (!t) return v;
     try { return JSON.parse(t); } catch (e) {}
+    const a = t.indexOf("[");
+    const b = t.lastIndexOf("]");
+    if (a >= 0 && b > a) {
+      try { return JSON.parse(t.slice(a, b + 1)); } catch (e) {}
+    }
+    const c = t.indexOf("{");
+    const d = t.lastIndexOf("}");
+    if (c >= 0 && d > c) {
+      try { return JSON.parse(t.slice(c, d + 1)); } catch (e) {}
+    }
     return v;
+  }
+
+  function rowObject(row, cols) {
+    row = parseMaybe(row);
+    if (!Array.isArray(row)) return row && typeof row === "object" ? row : {};
+    const o = {};
+    (cols || []).forEach((c, i) => o[c] = row[i]);
+    return o;
+  }
+
+  function findRows(value, depth = 0) {
+    value = parseMaybe(value);
+    if (depth > 5 || value == null) return [];
+    if (Array.isArray(value)) return value;
+    if (typeof value !== "object") return [];
+
+    const preferred = ["rows", "data", "result", "items", "records", "list", "content"];
+    for (const key of preferred) {
+      if (value[key] !== undefined) {
+        const found = findRows(value[key], depth + 1);
+        if (found.length) return found;
+      }
+    }
+
+    for (const key of Object.keys(value)) {
+      const child = value[key];
+      if (Array.isArray(child) && child.length) return child;
+    }
+    return [];
+  }
+
+  function getRows(json) {
+    return findRows(json);
+  }
+
+  function getColumns(json) {
+    json = parseMaybe(json);
+    if (!json || typeof json !== "object") return [];
+    for (const key of ["columnNames", "columns", "columnName", "headers"]) {
+      const v = parseMaybe(json[key]);
+      if (Array.isArray(v)) return v.map(x => typeof x === "object" ? (x.name || x.key || x.columnName || String(x)) : String(x));
+    }
+    if (json.result && typeof json.result === "object") return getColumns(json.result);
+    if (json.data && typeof json.data === "object") return getColumns(json.data);
+    return [];
+  }
+
+  function num(v) {
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+    const m = String(v ?? "").replace(",", ".").match(/-?\d+(?:\.\d+)?/);
+    return m ? Number(m[0]) : NaN;
   }
 
   function firstValue(o, keys) {
@@ -78,12 +123,6 @@ export default async function handler(req, res) {
     return "";
   }
 
-  function num(v) {
-    if (typeof v === "number" && Number.isFinite(v)) return v;
-    const m = String(v ?? "").replace(",", ".").match(/-?\d+(?:\.\d+)?/);
-    return m ? Number(m[0]) : NaN;
-  }
-
   function priceValue(o) {
     if (!o || typeof o !== "object") return NaN;
     const direct = firstValue(o, [
@@ -91,14 +130,19 @@ export default async function handler(req, res) {
       "birimFiyat", "birimFiyatTl", "birimFiyatTL", "birimEnerjiFiyati",
       "sarjHizmetiFiyati", "sarjHizmetiFiyat", "sarjHizmetiBirimFiyati",
       "hizmetFiyati", "hizmetFiyat", "fiyat", "fiyatTl", "fiyatTL",
-      "price", "unitPrice", "tarife", "ucret", "ücret", "kwhFiyat", "kWhFiyat"
+      "price", "unitPrice", "tarife", "ucret", "ücret", "kwhFiyat", "kWhFiyat",
+      "sarjHizmetiBirimFiyat", "enerjiBirimFiyati", "enerjiBirimFiyat"
     ]);
     const n = num(direct);
     return Number.isFinite(n) ? n : NaN;
   }
 
   function power(o) {
-    return firstValue(o, ["soketGucu", "soketGücü", "guc", "güç", "kw", "power", "gucKw", "maxGuc"]);
+    return firstValue(o, ["soketGucu", "soketGücü", "guc", "güç", "kw", "power", "gucKw", "maxGuc", "maxGüç"]);
+  }
+
+  function socketType(o) {
+    return firstValue(o, ["soketTipi", "soketTuru", "socketType", "connectorType", "tip", "konnektorTipi"]);
   }
 
   function addPriceToPower(p, price) {
@@ -110,7 +154,8 @@ export default async function handler(req, res) {
   }
 
   function enrichRow(raw, cols) {
-    const r = rowObject(parseMaybe(raw), cols);
+    const r = rowObject(raw, cols);
+
     const brand = firstValue(r, [
       "markaAdi", "marka", "tescilliMarka", "markaAd", "sarjAgiMarka",
       "sarjAgiIsletmecisiMarka", "saglayiciMarka", "operatorMarka",
@@ -129,18 +174,24 @@ export default async function handler(req, res) {
       r.fiyat = stationPrice;
       r.fiyatTl = stationPrice;
       r.birimFiyat = stationPrice;
+      r.birimFiyatTl = stationPrice;
     }
 
-    const socketKey = ["soketler", "sockets", "socketler", "sarjSoketleri", "sarjIstasyonuSoketleri", "sarjUniteleri", "soketBilgileri"]
-      .find(k => r[k] !== undefined && r[k] !== null);
+    const socketKey = [
+      "soketler", "sockets", "socketler", "sarjSoketleri", "sarjIstasyonuSoketleri",
+      "sarjUniteleri", "soketBilgileri", "soketBilgisi"
+    ].find(k => r[k] !== undefined && r[k] !== null);
+
     let sockets = socketKey ? parseMaybe(r[socketKey]) : [];
     if (!Array.isArray(sockets)) sockets = sockets ? [sockets] : [];
 
     if (sockets.length) {
-      r.soketler = sockets.map((rawSocket) => {
-        const s = typeof rawSocket === "object" ? {...rawSocket} : {soketTipi: String(rawSocket)};
+      r.soketler = sockets.map(rawSocket => {
+        const s = typeof rawSocket === "object" ? {...rawSocket} : {soketTipi:String(rawSocket)};
         const p = Number.isFinite(priceValue(s)) ? priceValue(s) : stationPrice;
         const pw = power(s);
+        const st = socketType(s);
+        if (st) s.soketTipi = st;
         if (pw || Number.isFinite(p)) s.soketGucu = addPriceToPower(pw, p);
         if (Number.isFinite(p)) {
           s.soketFiyati = p;
@@ -151,28 +202,31 @@ export default async function handler(req, res) {
         return s;
       });
     } else if (Number.isFinite(stationPrice)) {
-      r.soketler = [{soketGucu:`${stationPrice.toFixed(2)} TL/kWh`,soketFiyati:stationPrice,birimFiyat:stationPrice,birimFiyatTl:stationPrice}];
+      r.soketler = [{soketGucu:`${stationPrice.toFixed(2)} TL/kWh`,soketFiyati:stationPrice,birimFiyat:stationPrice,birimFiyatTl:stationPrice,fiyat:stationPrice}];
     }
+
     return r;
   }
 
   function normalizeResponse(json) {
-    const cols = json && Array.isArray(json.columnNames) ? json.columnNames : [];
+    json = parseMaybe(json);
+    const cols = getColumns(json);
     const rows = getRows(json);
     if (!rows.length) return json;
     const normalizedRows = rows.map(row => enrichRow(row, cols));
+
     if (Array.isArray(json)) return normalizedRows;
     if (json && Array.isArray(json.result)) return {...json, result: normalizedRows};
-    if (json && json.result && Array.isArray(json.result.rows)) return {...json, result: {...json.result, rows: normalizedRows}};
+    if (json && typeof json.result === "string") return {...json, result: normalizedRows};
+    if (json && json.result && typeof json.result === "object") return {...json, result: {...json.result, rows: normalizedRows}};
     if (json && Array.isArray(json.data)) return {...json, data: normalizedRows};
-    if (json && json.data && Array.isArray(json.data.result)) return {...json, data: {...json.data, result: normalizedRows}};
-    return json;
+    if (json && typeof json.data === "string") return {...json, data: normalizedRows};
+    if (json && json.data && typeof json.data === "object") return {...json, data: {...json.data, result: normalizedRows}};
+    return {data: normalizedRows};
   }
 
   function hasData(r) {
-    const rows = getRows(r.json);
-    if (rows.length > 0) return true;
-    return !!(r.json && typeof r.json.numRows === "number" && r.json.numRows > 0);
+    return getRows(r.json).length > 0;
   }
 
   const attempts = [
@@ -186,17 +240,17 @@ export default async function handler(req, res) {
   const logs = [];
   for (const attempt of attempts) {
     const r = await epdkRequest(attempt.body, attempt.label);
-    logs.push({label:r.label,statusCode:r.statusCode,numRows:r.json&&typeof r.json.numRows==="number"?r.json.numRows:getRows(r.json).length,sample:r.raw.slice(0,300)});
-    if (r.statusCode === 200 && hasData(r)) {
-      const normalized = normalizeResponse(r.json);
-      return res.status(200).send(JSON.stringify(normalized));
+    const rowCount = getRows(r.json).length;
+    logs.push({label:r.label,statusCode:r.statusCode,numRows:rowCount,sample:r.raw.slice(0,500)});
+    if (r.statusCode === 200 && rowCount > 0) {
+      return res.status(200).send(JSON.stringify(normalizeResponse(r.json)));
     }
   }
 
   return res.status(502).send(JSON.stringify({
     ok:false,
-    error:"EPDK bağlantısı çalıştı ama veri dönmedi",
-    note:"Tüm GET body formatları denendi. EPDK geçici kota/boş cevap dönmüş olabilir.",
+    error:"EPDK bağlantısı çalıştı ama istasyon verisi ayrıştırılamadı",
+    note:"EPDK'nın güncel REST servisinden gelen iç içe/string JSON cevap formatları da denendi.",
     attempts:logs
   }, null, 2));
 }
