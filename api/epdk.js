@@ -4,253 +4,50 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
   res.setHeader("Content-Type", "application/json; charset=utf-8");
-
   if (req.method === "OPTIONS") return res.status(204).end();
-
   const https = await import("https");
-
   function epdkRequest(bodyValue, label) {
     return new Promise((resolve) => {
       const body = typeof bodyValue === "string" ? bodyValue : JSON.stringify(bodyValue);
-      const headers = {
-        Accept: "application/json,text/plain,*/*",
-        "Content-Type": "application/json",
-        "Content-Length": Buffer.byteLength(body),
-        "User-Agent": "Mozilla/5.0 MolaVolt/1.1"
-      };
-      const options = {
-        hostname: "apigateway.epdk.gov.tr",
-        path: "/sarjIstasyonlari/",
-        method: "GET",
-        headers,
-        timeout: 45000
-      };
+      const headers = {Accept:"application/json,text/plain,*/*","Content-Type":"application/json","Content-Length":Buffer.byteLength(body),"User-Agent":"Mozilla/5.0 MolaVolt/1.2"};
+      const options = {hostname:"apigateway.epdk.gov.tr",path:"/sarjIstasyonlari/",method:"GET",headers,timeout:45000};
       const request = https.request(options, (response) => {
-        let data = "";
-        response.setEncoding("utf8");
-        response.on("data", chunk => { data += chunk; });
-        response.on("end", () => {
-          let json = null;
-          try { json = JSON.parse(data); } catch (e) {}
-          resolve({label, statusCode: response.statusCode || 500, raw: data, json});
-        });
+        let data=""; response.setEncoding("utf8"); response.on("data",chunk=>{data+=chunk});
+        response.on("end",()=>{let json=null;try{json=JSON.parse(data)}catch(e){}resolve({label,statusCode:response.statusCode||500,raw:data,json})});
       });
-      request.on("timeout", () => request.destroy(new Error("EPDK timeout")));
-      request.on("error", (error) => resolve({
-        label,
-        statusCode: 502,
-        raw: JSON.stringify({ok:false,error:"EPDK bağlantı hatası",detail:error.message}),
-        json: null
-      }));
-      request.write(body);
-      request.end();
+      request.on("timeout",()=>request.destroy(new Error("EPDK timeout")));
+      request.on("error",error=>resolve({label,statusCode:502,raw:JSON.stringify({ok:false,error:"EPDK bağlantı hatası",detail:error.message}),json:null}));
+      request.write(body);request.end();
     });
   }
-
-  function parseMaybe(v) {
-    if (typeof v !== "string") return v;
-    const t = v.trim();
-    if (!t) return v;
-    try { return JSON.parse(t); } catch (e) {}
-    const a = t.indexOf("[");
-    const b = t.lastIndexOf("]");
-    if (a >= 0 && b > a) {
-      try { return JSON.parse(t.slice(a, b + 1)); } catch (e) {}
-    }
-    const c = t.indexOf("{");
-    const d = t.lastIndexOf("}");
-    if (c >= 0 && d > c) {
-      try { return JSON.parse(t.slice(c, d + 1)); } catch (e) {}
-    }
-    return v;
-  }
-
-  function rowObject(row, cols) {
-    row = parseMaybe(row);
-    if (!Array.isArray(row)) return row && typeof row === "object" ? row : {};
-    const o = {};
-    (cols || []).forEach((c, i) => o[c] = row[i]);
-    return o;
-  }
-
-  function findRows(value, depth = 0) {
-    value = parseMaybe(value);
-    if (depth > 5 || value == null) return [];
-    if (Array.isArray(value)) return value;
-    if (typeof value !== "object") return [];
-
-    const preferred = ["rows", "data", "result", "items", "records", "list", "content"];
-    for (const key of preferred) {
-      if (value[key] !== undefined) {
-        const found = findRows(value[key], depth + 1);
-        if (found.length) return found;
-      }
-    }
-
-    for (const key of Object.keys(value)) {
-      const child = value[key];
-      if (Array.isArray(child) && child.length) return child;
-    }
-    return [];
-  }
-
-  function getRows(json) {
-    return findRows(json);
-  }
-
-  function getColumns(json) {
-    json = parseMaybe(json);
-    if (!json || typeof json !== "object") return [];
-    for (const key of ["columnNames", "columns", "columnName", "headers"]) {
-      const v = parseMaybe(json[key]);
-      if (Array.isArray(v)) return v.map(x => typeof x === "object" ? (x.name || x.key || x.columnName || String(x)) : String(x));
-    }
-    if (json.result && typeof json.result === "object") return getColumns(json.result);
-    if (json.data && typeof json.data === "object") return getColumns(json.data);
-    return [];
-  }
-
-  function num(v) {
-    if (typeof v === "number" && Number.isFinite(v)) return v;
-    const m = String(v ?? "").replace(",", ".").match(/-?\d+(?:\.\d+)?/);
-    return m ? Number(m[0]) : NaN;
-  }
-
-  function firstValue(o, keys) {
-    for (const key of keys) {
-      if (o && o[key] !== undefined && o[key] !== null && String(o[key]).trim() !== "") return o[key];
-    }
-    return "";
-  }
-
-  function priceValue(o) {
-    if (!o || typeof o !== "object") return NaN;
-    const direct = firstValue(o, [
-      "soketFiyati", "soketFiyat", "soketBirimFiyati", "soketBirimFiyat",
-      "birimFiyat", "birimFiyatTl", "birimFiyatTL", "birimEnerjiFiyati",
-      "sarjHizmetiFiyati", "sarjHizmetiFiyat", "sarjHizmetiBirimFiyati",
-      "hizmetFiyati", "hizmetFiyat", "fiyat", "fiyatTl", "fiyatTL",
-      "price", "unitPrice", "tarife", "ucret", "ücret", "kwhFiyat", "kWhFiyat",
-      "sarjHizmetiBirimFiyat", "enerjiBirimFiyati", "enerjiBirimFiyat"
-    ]);
-    const n = num(direct);
-    return Number.isFinite(n) ? n : NaN;
-  }
-
-  function power(o) {
-    return firstValue(o, ["soketGucu", "soketGücü", "guc", "güç", "kw", "power", "gucKw", "maxGuc", "maxGüç"]);
-  }
-
-  function socketType(o) {
-    return firstValue(o, ["soketTipi", "soketTuru", "socketType", "connectorType", "tip", "konnektorTipi"]);
-  }
-
-  function addPriceToPower(p, price) {
-    const base = String(p ?? "").trim();
-    if (!Number.isFinite(price)) return base;
-    const priceText = `${price.toFixed(2)} TL/kWh`;
-    if (base && /TL\s*\/\s*kWh/i.test(base)) return base;
-    return base ? `${base} · ${priceText}` : priceText;
-  }
-
-  function enrichRow(raw, cols) {
-    const r = rowObject(raw, cols);
-
-    const brand = firstValue(r, [
-      "markaAdi", "marka", "tescilliMarka", "markaAd", "sarjAgiMarka",
-      "sarjAgiIsletmecisiMarka", "saglayiciMarka", "operatorMarka",
-      "sarjAgiIsletmecisi", "sarjAgiIsletmecisiUnvan",
-      "sarjIstasyonuIsletmecisi", "sarjIstasyonuIsletmecisiUnvan",
-      "hizmetSaglayici", "hizmetSaglayiciAdi", "isletmeci", "isletmeciUnvan"
-    ]);
-    if (brand) {
-      r.marka = String(brand).trim();
-      r.markaAdi = String(brand).trim();
-      r.sarjAgiMarka = String(brand).trim();
-    }
-
-    const stationPrice = priceValue(r);
-    if (Number.isFinite(stationPrice)) {
-      r.fiyat = stationPrice;
-      r.fiyatTl = stationPrice;
-      r.birimFiyat = stationPrice;
-      r.birimFiyatTl = stationPrice;
-    }
-
-    const socketKey = [
-      "soketler", "sockets", "socketler", "sarjSoketleri", "sarjIstasyonuSoketleri",
-      "sarjUniteleri", "soketBilgileri", "soketBilgisi"
-    ].find(k => r[k] !== undefined && r[k] !== null);
-
-    let sockets = socketKey ? parseMaybe(r[socketKey]) : [];
-    if (!Array.isArray(sockets)) sockets = sockets ? [sockets] : [];
-
-    if (sockets.length) {
-      r.soketler = sockets.map(rawSocket => {
-        const s = typeof rawSocket === "object" ? {...rawSocket} : {soketTipi:String(rawSocket)};
-        const p = Number.isFinite(priceValue(s)) ? priceValue(s) : stationPrice;
-        const pw = power(s);
-        const st = socketType(s);
-        if (st) s.soketTipi = st;
-        if (pw || Number.isFinite(p)) s.soketGucu = addPriceToPower(pw, p);
-        if (Number.isFinite(p)) {
-          s.soketFiyati = p;
-          s.birimFiyat = p;
-          s.birimFiyatTl = p;
-          s.fiyat = p;
-        }
-        return s;
-      });
-    } else if (Number.isFinite(stationPrice)) {
-      r.soketler = [{soketGucu:`${stationPrice.toFixed(2)} TL/kWh`,soketFiyati:stationPrice,birimFiyat:stationPrice,birimFiyatTl:stationPrice,fiyat:stationPrice}];
-    }
-
+  function parseMaybe(v){if(typeof v!=="string")return v;const t=v.trim();if(!t)return v;try{return JSON.parse(t)}catch(e){}const a=t.indexOf("["),b=t.lastIndexOf("]");if(a>=0&&b>a){try{return JSON.parse(t.slice(a,b+1))}catch(e){}}const c=t.indexOf("{"),d=t.lastIndexOf("}");if(c>=0&&d>c){try{return JSON.parse(t.slice(c,d+1))}catch(e){}}return v}
+  function rowObject(row,cols){row=parseMaybe(row);if(!Array.isArray(row))return row&&typeof row==="object"?row:{};const o={};(cols||[]).forEach((c,i)=>o[c]=row[i]);return o}
+  function findRows(value,depth=0){value=parseMaybe(value);if(depth>5||value==null)return[];if(Array.isArray(value))return value;if(typeof value!=="object")return[];const preferred=["rows","data","result","items","records","list","content"];for(const key of preferred){if(value[key]!==undefined){const found=findRows(value[key],depth+1);if(found.length)return found}}for(const key of Object.keys(value)){const child=value[key];if(Array.isArray(child)&&child.length)return child}return[]}
+  function getRows(json){return findRows(json)}
+  function getColumns(json){json=parseMaybe(json);if(!json||typeof json!=="object")return[];for(const key of ["columnNames","columns","columnName","headers"]){const v=parseMaybe(json[key]);if(Array.isArray(v))return v.map(x=>typeof x==="object"?(x.name||x.key||x.columnName||String(x)):String(x))}if(json.result&&typeof json.result==="object")return getColumns(json.result);if(json.data&&typeof json.data==="object")return getColumns(json.data);return[]}
+  function num(v){if(typeof v==="number"&&Number.isFinite(v))return v;const m=String(v??"").replace(",",".").match(/-?\d+(?:\.\d+)?/);return m?Number(m[0]):NaN}
+  function firstValue(o,keys){for(const key of keys){if(o&&o[key]!==undefined&&o[key]!==null&&String(o[key]).trim()!=="")return o[key]}return""}
+  function priceValue(o){if(!o||typeof o!=="object")return NaN;const direct=firstValue(o,["soketFiyati","soketFiyat","soketBirimFiyati","soketBirimFiyat","birimFiyat","birimFiyatTl","birimFiyatTL","birimEnerjiFiyati","sarjHizmetiFiyati","sarjHizmetiFiyat","sarjHizmetiBirimFiyati","sarjHizmetiBirimFiyat","hizmetFiyati","hizmetFiyat","fiyat","fiyatTl","fiyatTL","price","unitPrice","tarife","ucret","ücret","kwhFiyat","kWhFiyat","enerjiBirimFiyati","enerjiBirimFiyat"]);const n=num(direct);return Number.isFinite(n)?n:NaN}
+  function power(o){return firstValue(o,["soketGucu","soketGücü","guc","güç","kw","power","gucKw","maxGuc","maxGüç"])}
+  function socketType(o){return firstValue(o,["soketTipi","soketTuru","socketType","connectorType","tip","konnektorTipi"])}
+  function addPriceToPower(p,price){const base=String(p??"").trim();if(!Number.isFinite(price))return base;const priceText=`${price.toFixed(2)} TL/kWh`;if(base&&/TL\s*\/\s*kWh/i.test(base))return base;return base?`${base} · ${priceText}`:priceText}
+  function enrichRow(raw,cols){
+    const r=rowObject(raw,cols);
+    const brand=firstValue(r,["markaAdi","marka","tescilliMarka","markaAd","sarjAgiMarka","sarjAgiIsletmecisiMarka","saglayiciMarka","operatorMarka","sarjAgiIsletmecisi","sarjAgiIsletmecisiUnvan","sarjIstasyonuIsletmecisi","sarjIstasyonuIsletmecisiUnvan","hizmetSaglayici","hizmetSaglayiciAdi","isletmeci","isletmeciUnvan","operator","operatorName","company"]);
+    const brandText=String(brand||"").trim();
+    if(brandText){r.marka=brandText;r.markaAdi=brandText;r.sarjAgiMarka=brandText;r.operator=brandText;r.operatorName=brandText;}
+    const stationName=firstValue(r,["sarjIstasyonuAdi","istasyonAdi","istasyonAd","ad","name","stationName"]);
+    if(brandText&&stationName&&!String(stationName).toLowerCase().startsWith(brandText.toLowerCase()))r.sarjIstasyonuAdi=`${brandText} · ${stationName}`;
+    const stationPrice=priceValue(r);
+    if(Number.isFinite(stationPrice)){r.fiyat=stationPrice;r.fiyatTl=stationPrice;r.birimFiyat=stationPrice;r.birimFiyatTl=stationPrice;r.sarjHizmetiBirimFiyati=stationPrice;r.sarjHizmetiBirimFiyat=stationPrice;}
+    const socketKey=["soketler","sockets","socketler","sarjSoketleri","sarjIstasyonuSoketleri","sarjUniteleri","soketBilgileri","soketBilgisi"].find(k=>r[k]!==undefined&&r[k]!==null);
+    let sockets=socketKey?parseMaybe(r[socketKey]):[];if(!Array.isArray(sockets))sockets=sockets?[sockets]:[];
+    if(sockets.length){r.soketler=sockets.map(rawSocket=>{const s=typeof rawSocket==="object"?{...rawSocket}:{soketTipi:String(rawSocket)};const p=Number.isFinite(priceValue(s))?priceValue(s):stationPrice;const pw=power(s);const st=socketType(s);if(st)s.soketTipi=st;if(pw||Number.isFinite(p))s.soketGucu=addPriceToPower(pw,p);if(Number.isFinite(p)){s.soketFiyati=p;s.birimFiyat=p;s.birimFiyatTl=p;s.fiyat=p;s.sarjHizmetiBirimFiyati=p;}return s})}
+    else if(Number.isFinite(stationPrice))r.soketler=[{soketGucu:`${stationPrice.toFixed(2)} TL/kWh`,soketFiyati:stationPrice,birimFiyat:stationPrice,birimFiyatTl:stationPrice,fiyat:stationPrice}];
     return r;
   }
-
-  function normalizeResponse(json) {
-    json = parseMaybe(json);
-    const cols = getColumns(json);
-    const rows = getRows(json);
-    if (!rows.length) return json;
-    const normalizedRows = rows.map(row => enrichRow(row, cols));
-
-    if (Array.isArray(json)) return normalizedRows;
-    if (json && Array.isArray(json.result)) return {...json, result: normalizedRows};
-    if (json && typeof json.result === "string") return {...json, result: normalizedRows};
-    if (json && json.result && typeof json.result === "object") return {...json, result: {...json.result, rows: normalizedRows}};
-    if (json && Array.isArray(json.data)) return {...json, data: normalizedRows};
-    if (json && typeof json.data === "string") return {...json, data: normalizedRows};
-    if (json && json.data && typeof json.data === "object") return {...json, data: {...json.data, result: normalizedRows}};
-    return {data: normalizedRows};
-  }
-
-  function hasData(r) {
-    return getRows(r.json).length > 0;
-  }
-
-  const attempts = [
-    {label:"GET body boş obje", body:"{}"},
-    {label:"GET body boş string", body:JSON.stringify("")},
-    {label:"GET body string obje", body:JSON.stringify("{}")},
-    {label:"GET body null alanlar", body:JSON.stringify({lisansNo:null,sarjIstasyonuAdi:null,sarjIstasyonuNo:null,markaAdi:null,yesilSarjIstasyonuMu:null,hizmetSekli:null})},
-    {label:"GET body boş alanlar", body:JSON.stringify({lisansNo:"",sarjIstasyonuAdi:"",sarjIstasyonuNo:"",markaAdi:"",yesilSarjIstasyonuMu:"",hizmetSekli:""})}
-  ];
-
-  const logs = [];
-  for (const attempt of attempts) {
-    const r = await epdkRequest(attempt.body, attempt.label);
-    const rowCount = getRows(r.json).length;
-    logs.push({label:r.label,statusCode:r.statusCode,numRows:rowCount,sample:r.raw.slice(0,500)});
-    if (r.statusCode === 200 && rowCount > 0) {
-      return res.status(200).send(JSON.stringify(normalizeResponse(r.json)));
-    }
-  }
-
-  return res.status(502).send(JSON.stringify({
-    ok:false,
-    error:"EPDK bağlantısı çalıştı ama istasyon verisi ayrıştırılamadı",
-    note:"EPDK'nın güncel REST servisinden gelen iç içe/string JSON cevap formatları da denendi.",
-    attempts:logs
-  }, null, 2));
+  function normalizeResponse(json){json=parseMaybe(json);const cols=getColumns(json);const rows=getRows(json);if(!rows.length)return json;const normalizedRows=rows.map(row=>enrichRow(row,cols));if(Array.isArray(json))return normalizedRows;if(json&&Array.isArray(json.result))return {...json,result:normalizedRows};if(json&&typeof json.result==="string")return {...json,result:normalizedRows};if(json&&json.result&&typeof json.result==="object")return {...json,result:{...json.result,rows:normalizedRows}};if(json&&Array.isArray(json.data))return {...json,data:normalizedRows};if(json&&typeof json.data==="string")return {...json,data:normalizedRows};if(json&&json.data&&typeof json.data==="object")return {...json,data:{...json.data,result:normalizedRows}};return{data:normalizedRows}}
+  const attempts=[{label:"GET body boş obje",body:"{}"},{label:"GET body boş string",body:JSON.stringify("")},{label:"GET body string obje",body:JSON.stringify("{}")},{label:"GET body null alanlar",body:JSON.stringify({lisansNo:null,sarjIstasyonuAdi:null,sarjIstasyonuNo:null,markaAdi:null,yesilSarjIstasyonuMu:null,hizmetSekli:null})},{label:"GET body boş alanlar",body:JSON.stringify({lisansNo:"",sarjIstasyonuAdi:"",sarjIstasyonuNo:"",markaAdi:"",yesilSarjIstasyonuMu:"",hizmetSekli:""})}];
+  const logs=[];for(const attempt of attempts){const r=await epdkRequest(attempt.body,attempt.label);const rowCount=getRows(r.json).length;logs.push({label:r.label,statusCode:r.statusCode,numRows:rowCount,sample:r.raw.slice(0,500)});if(r.statusCode===200&&rowCount>0)return res.status(200).send(JSON.stringify(normalizeResponse(r.json)))}
+  return res.status(502).send(JSON.stringify({ok:false,error:"EPDK bağlantısı çalıştı ama istasyon verisi ayrıştırılamadı",note:"EPDK'nın güncel REST servisinden gelen iç içe/string JSON cevap formatları da denendi.",attempts:logs},null,2));
 }
