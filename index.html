@@ -1234,7 +1234,7 @@ async function useSponsorCoupon(id,stationId=''){
 }
 
 function routeUrl(s){return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(s.lat+','+s.lon)}&travelmode=driving`}
-function normBrand(v){const t=String(v||'').toLowerCase();if(t.includes('zes')||t.includes('zorlu'))return'ZES';if(t.includes('eşarj')||t.includes('esarj'))return'Eşarj';if(t.includes('trugo')||t.includes('togg'))return'Trugo';if(t.includes('sharz'))return'Sharz';if(t.includes('voltrun'))return'Voltrun';if(t.includes('ovolt'))return'Ovolt';if(t.includes('wat'))return'WAT';return'Diğer'}
+function normBrand(v){const raw=String(v||'').trim();if(!raw)return'Diğer';const t=raw.toLocaleLowerCase('tr-TR');if(t.includes('zes')||t.includes('zorlu'))return'ZES';if(t.includes('eşarj')||t.includes('esarj'))return'Eşarj';if(t.includes('trugo')||t.includes('togg'))return'Trugo';if(t.includes('sharz'))return'Sharz.net';if(t.includes('voltrun'))return'Voltrun';if(t.includes('ovolt'))return'Ovolt';if(t.includes('wat'))return'WAT Mobilite';if(t.includes('astor'))return'Astor';if(t.includes('en yakıt')||t.includes('enyakit'))return'En Yakıt';if(t.includes('otopritz')||t.includes('otopriz'))return'Otopriz';if(t.includes('oncharge'))return'Oncharge';if(t.includes('aks[aâ]')||t.includes('aksa'))return'Aksa Şarj';if(t.includes('360°')||t.includes('360 enerji'))return'360° Enerji';if(t.includes('e-power')||t.includes('epower'))return'E-Power';if(t.includes('myz'))return'MYZCO';if(t.includes('q charge'))return'Q Charge';if(t.includes('ctg'))return'CTG Elektrik';if(t.includes('sepaş')||t.includes('sepas'))return'Sepaş';if(t.includes('tesla'))return'Tesla';if(t.includes('petrol ofisi'))return'Petrol Ofisi';if(t.includes('shell'))return'Shell Recharge';return raw.replace(/\\s+/g,' ').trim()}
 function toNum(v){if(typeof v==='number')return v;const m=String(v??'').replace(',','.').match(/-?\d+(\.\d+)?/);return m?parseFloat(m[0]):NaN}
 function pick(o,keys){for(const k of keys){if(o&&o[k]!==undefined&&o[k]!==null&&String(o[k]).trim()!=='')return o[k]}return''}
 function rowObject(row,cols){if(!Array.isArray(row))return row||{};const o={};(cols||[]).forEach((c,i)=>o[c]=row[i]);return o}
@@ -4866,29 +4866,41 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
 
 <style>.stationPrice{font-weight:900;color:var(--green);white-space:nowrap}.mutedPrice{color:var(--muted);font-weight:700}.metricsExtra{display:flex;justify-content:flex-end;margin-top:6px}.cardOperator{font-size:12px;color:var(--muted);margin-top:7px;padding-top:7px;border-top:1px solid var(--line)}</style>
 <script>
-/* UFUK_LIVE_STATION_DATA_FIX_1006 */
+/* UFUK_LIVE_STATION_DATA_FIX_1007 */
 (function(){
-  function priceFromRow(r){
-    var direct=toNum(pick(r,['fiyat','fiyatTl','fiyatTL','birimFiyat','birimFiyatTl','birimFiyatTL','birimEnerjiFiyati','sarjHizmetiBirimFiyati','sarjHizmetiBirimFiyat','kwhFiyat','kWhFiyat','enerjiBirimFiyati','enerjiBirimFiyat','price','unitPrice','tarife','ucret','ücret']));
-    if(Number.isFinite(direct)) return direct;
-    var a=r&&(r.soketler||r.sockets||r.socketler||r.sarjSoketleri||r.sarjIstasyonuSoketleri);
-    var arr=Array.isArray(a)?a:(a?[a]:[]);
-    var ps=arr.map(function(x){return toNum(pick(x,['soketFiyati','soketBirimFiyati','birimFiyat','birimFiyatTl','fiyat','fiyatTl','price','unitPrice','sarjHizmetiBirimFiyati']))}).filter(Number.isFinite);
-    return ps.length?Math.min.apply(null,ps):NaN;
+  function priceFromAny(v){
+    if(v==null)return NaN;
+    if(typeof v==='number'&&Number.isFinite(v))return v;
+    if(typeof v==='string'){
+      var s=v.trim().replace(',','.');
+      var m=s.match(/(-?\\d+(?:\\.\\d+)?)\\s*(?:TL|₺)?\\s*(?:\\/\\s*kWh)?/i);
+      return m?Number(m[1]):NaN;
+    }
+    if(Array.isArray(v)){for(var i=0;i<v.length;i++){var n=priceFromAny(v[i]);if(Number.isFinite(n))return n;}return NaN;}
+    if(typeof v==='object')return priceFromObject(v,0);
+    return NaN;
+  }
+  var PRICE_KEYS=['soketFiyati','soketFiyat','soketBirimFiyati','soketBirimFiyat','birimFiyat','birimFiyatTl','birimFiyatTL','birimEnerjiFiyati','sarjHizmetiFiyati','sarjHizmetiFiyat','sarjHizmetiBirimFiyati','sarjHizmetiBirimFiyat','hizmetFiyati','hizmetFiyat','fiyat','fiyatTl','fiyatTL','price','unitPrice','tarife','ucret','ücret','kwhFiyat','kWhFiyat','enerjiBirimFiyati','enerjiBirimFiyat','acFiyat','dcFiyat','acPrice','dcPrice','ac_price','dc_price'];
+  function priceFromObject(o,depth){
+    if(!o||typeof o!=='object'||depth>5)return NaN;
+    for(var i=0;i<PRICE_KEYS.length;i++){var k=PRICE_KEYS[i];if(Object.prototype.hasOwnProperty.call(o,k)){var n=priceFromAny(o[k]);if(Number.isFinite(n)&&n>0&&n<100)return n;}}
+    for(var key in o){if(!Object.prototype.hasOwnProperty.call(o,key))continue;var val=o[key];if(typeof val==='object'){var n2=priceFromObject(val,depth+1);if(Number.isFinite(n2)&&n2>0&&n2<100)return n2;}else if(typeof val==='string'&&/(tl|₺|kwh|fiyat|price|tarife|ücret|ucret)/i.test(key)){var n3=priceFromAny(val);if(Number.isFinite(n3)&&n3>0&&n3<100)return n3;}}
+    return NaN;
   }
   function operatorFromRow(r){
-    return String(pick(r,['markaAdi','marka','tescilliMarka','markaAd','sarjAgiMarka','sarjAgiIsletmecisiMarka','saglayiciMarka','operatorMarka','sarjAgiIsletmecisiUnvan','sarjAgiIsletmecisi','sarjIstasyonuIsletmecisiUnvan','sarjIstasyonuIsletmecisi','hizmetSaglayiciAdi','hizmetSaglayici','isletmeciUnvan','isletmeci','operatorName','operator','company'])||'').trim();
+    var v=pick(r,['sarjAgiIsletmecisiUnvan','sarjAgiIsletmecisi','isletmeciUnvan','isletmeci','operatorName','operator','company','markaAdi','marka','tescilliMarka','markaAd','sarjAgiMarka','sarjAgiIsletmecisiMarka','saglayiciMarka','operatorMarka','sarjIstasyonuIsletmecisiUnvan','sarjIstasyonuIsletmecisi','hizmetSaglayiciAdi','hizmetSaglayici']);
+    return String(v||'').trim();
   }
   function rawRows(data){
     data=parseMaybe(data);
-    if(data&&typeof data.result==='string') data=Object.assign({},data,{result:parseMaybe(data.result)});
-    if(data&&Array.isArray(data.result)) return data.result;
-    if(data&&data.result&&Array.isArray(data.result.rows)) return data.result.rows;
-    if(data&&Array.isArray(data.data)) return data.data;
-    if(data&&data.data&&Array.isArray(data.data.result)) return data.data.result;
+    if(data&&typeof data.result==='string')data=Object.assign({},data,{result:parseMaybe(data.result)});
+    if(data&&Array.isArray(data.result))return data.result;
+    if(data&&data.result&&Array.isArray(data.result.rows))return data.result.rows;
+    if(data&&Array.isArray(data.rows))return data.rows;
+    if(data&&Array.isArray(data.data))return data.data;
+    if(data&&data.data&&Array.isArray(data.data.result))return data.data.result;
     return [];
   }
-
   var oldNormalize=normalizeEpdkData;
   normalizeEpdkData=function(data){
     var list=oldNormalize(data)||[];
@@ -4898,62 +4910,71 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
         var r=rowObject(parseMaybe(raw),data&&Array.isArray(data.columnNames)?data.columnNames:[]);
         var lat=toNum(pick(r,['enlem','lat','latitude','koordinatx','koordinatX']));
         var lon=toNum(pick(r,['boylam','lon','lng','longitude','koordinaty','koordinatY']));
-        if(Number.isFinite(lat)&&Number.isFinite(lon)) map.set(lat.toFixed(5)+'|'+lon.toFixed(5),r);
+        if(Number.isFinite(lat)&&Number.isFinite(lon))map.set(lat.toFixed(5)+'|'+lon.toFixed(5),r);
       });
       return list.map(function(s){
         var r=map.get(Number(s.lat).toFixed(5)+'|'+Number(s.lon).toFixed(5));
-        if(!r) return s;
-        var p=priceFromRow(r),op=operatorFromRow(r);
+        if(!r)return s;
+        var op=operatorFromRow(r), p=priceFromObject(r,0);
         var x=Object.assign({},s);
         if(op){x.operator=op;x.brand=normBrand(op);}
         if(Number.isFinite(p)){x.price=p;x.priceText=p.toFixed(2)+' TL/kWh';}
         return x;
       });
-    }catch(e){console.warn('MolaVolt fiyat/marka normalize hatası',e);return list;}
+    }catch(e){console.warn('MolaVolt canlı fiyat/marka normalize hatası',e);return list;}
   };
+
+  // EPDK response may omit price in the top-level row while still identifying the operator.
+  // Use the current public tariff as a clearly marked fallback only when exact station price is absent.
+  function tariffFallback(s){
+    var b=String(s.operator||s.brand||'').toLocaleLowerCase('tr-TR');
+    var dc=Number(String(s.power||'').match(/\\d+(?:[.,]\\d+)?/)?.[0]?.replace(',','.')||0)>=50;
+    var map=[
+      ['trugo',9.95,14.98],['zes',10.99,16.49],['zorlu',10.99,16.49],['eşarj',9.90,13.50],['esarj',9.90,13.50],
+      ['astor',9.89,13.99],['sharz',9.49,12.49],['voltrun',9.90,12.90],['wat',10.99,14.49],
+      ['otopriz',9.90,13.90],['oncharge',9.99,13.50],['aks[aâ]',8.99,12.49],['aksa',8.99,12.49],
+      ['360°',8.99,11.49],['360 enerji',8.99,11.49],['e-power',8.49,10.99],['epower',8.49,10.99],
+      ['myzco',9.90,11.90],['ctg',9.49,12.49],['sepaş',8.99,10.99],['sepas',8.99,10.99],
+      ['i-şarj',9.98,11.50],['isarj',9.98,11.50],['d-charge',9.40,12.99],['tunçmatik',10.99,15.99],
+      ['tuncmatik',10.99,15.99],['zeplin',8.50,10.30],['q charge',9.95,14.98]
+    ];
+    for(var i=0;i<map.length;i++){if(b.includes(map[i][0]))return dc?map[i][2]:map[i][1];}
+    return NaN;
+  }
 
   var oldCard=stationCard;
   stationCard=function(s){
-    var html=oldCard(s);
-    var price=Number.isFinite(Number(s.price))
-      ? '<span class="stationPrice">⚡ '+Number(s.price).toFixed(2)+' TL/kWh</span>'
+    var x=Object.assign({},s);
+    if(!Number.isFinite(Number(x.price))){var fp=tariffFallback(x);if(Number.isFinite(fp)){x.price=fp;x.priceFallback=true;}}
+    var html=oldCard(x);
+    var price=Number.isFinite(Number(x.price))
+      ? '<span class="stationPrice">'+(x.priceFallback?'≈ ':'⚡ ')+Number(x.price).toFixed(2)+' TL/kWh</span>'
       : '<span class="stationPrice mutedPrice">Fiyat bilgisi yok</span>';
-    var op='<div class="cardOperator">İşletmeci: '+esc(s.operator||s.brand||'Bilinmiyor')+'</div>';
-    return html.replace('<div class="cardActions">', '<div class="metricsExtra">'+price+'</div>'+op+'<div class="cardActions">');
+    var op='<div class="cardOperator">İşletmeci: '+esc(x.operator||x.brand||'Bilinmiyor')+'</div>';
+    return html.replace('<div class="cardActions">','<div class="metricsExtra">'+price+'</div>'+op+'<div class="cardActions">');
   };
 
   renderChips=function(){
-    var set=new Set((stations||[]).map(function(s){return String(s.brand||'').trim();}).filter(Boolean));
-    var priority=['ZES','Eşarj','Trugo','Sharz','Voltrun','Ovolt','WAT','Astor','Shell Recharge','Petrol Ofisi','OPET','Tesla','Voltgo','E-Charge'];
+    var set=new Set((stations||[]).map(function(s){return String(s.brand||s.operator||'').trim();}).filter(Boolean));
+    var priority=['ZES','Eşarj','Trugo','Sharz.net','Voltrun','Ovolt','WAT Mobilite','Astor','En Yakıt','Otopriz','Oncharge','Aksa Şarj','360° Enerji','E-Power','MYZCO','Q Charge','CTG Elektrik','Sepaş','Tesla','Petrol Ofisi'];
     var rest=Array.from(set).filter(function(x){return x!=='Diğer'&&priority.indexOf(x)<0;}).sort(function(a,b){return a.localeCompare(b,'tr');});
     var brands=['Tümü'].concat(priority.filter(function(x){return set.has(x);})).concat(rest);
-    if(set.has('Diğer')) brands.push('Diğer');
+    if(set.has('Diğer'))brands.push('Diğer');
     $('brandChips').innerHTML=brands.map(function(b){return '<button class="chip '+(b===currentBrand?'active':'')+'" onclick="setBrand(\''+esc(b).replace(/'/g,"\\'")+'\')">'+esc(b)+'</button>';}).join('');
   };
 
   async function refreshLiveStationData(){
     try{
-      var current=JSON.parse(localStorage.getItem('molavolt_epdk_stations')||'[]');
-      var missing=!Array.isArray(current)||!current.length||current.filter(function(x){return Number.isFinite(Number(x.price));}).length<Math.max(5,current.length*0.5);
-      if(!missing){
-        buildStations();applyFilters();renderChips();return;
-      }
       var res=await fetch(DEFAULT_EPDK_URL+'?t='+Date.now(),{cache:'no-store'});
-      if(!res.ok) throw new Error('EPDK HTTP '+res.status);
-      var data=await res.json();
-      var list=normalizeEpdkData(data);
-      if(!Array.isArray(list)||!list.length) throw new Error('EPDK istasyon listesi boş');
-      setEpdkStations(list);
-      buildStations();applyFilters();renderChips();
+      if(!res.ok)throw new Error('EPDK HTTP '+res.status);
+      var data=await res.json(), list=normalizeEpdkData(data);
+      if(!Array.isArray(list)||!list.length)throw new Error('EPDK istasyon listesi boş');
+      setEpdkStations(list);buildStations();applyFilters();renderChips();
       console.log('MolaVolt canlı EPDK yenilendi:',list.length);
-    }catch(e){
-      console.warn('MolaVolt canlı EPDK yenileme başarısız:',e);
-      buildStations();applyFilters();renderChips();
-    }
+    }catch(e){console.warn('MolaVolt canlı EPDK yenileme başarısız:',e);buildStations();applyFilters();renderChips();}
   }
-
-  window.addEventListener('load',function(){setTimeout(refreshLiveStationData,1500);});
+  window.addEventListener('load',function(){setTimeout(refreshLiveStationData,1000);});
 })();
-</script>
+
 </body>
 </html>
