@@ -4873,7 +4873,7 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
     if(typeof v==='number'&&Number.isFinite(v))return v;
     if(typeof v==='string'){
       var s=v.trim().replace(',','.');
-      var m=s.match(/(-?\\d+(?:\\.\\d+)?)\\s*(?:TL|₺)?\\s*(?:\\/\\s*kWh)?/i);
+      var m=s.match(/(-?\d+(?:\.\d+)?)\s*(?:TL|₺)?\s*(?:\/\s*kWh)?/i);
       return m?Number(m[1]):NaN;
     }
     if(Array.isArray(v)){for(var i=0;i<v.length;i++){var n=priceFromAny(v[i]);if(Number.isFinite(n))return n;}return NaN;}
@@ -4928,7 +4928,7 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
   // Use the current public tariff as a clearly marked fallback only when exact station price is absent.
   function tariffFallback(s){
     var b=String(s.operator||s.brand||'').toLocaleLowerCase('tr-TR');
-    var dc=Number(String(s.power||'').match(/\\d+(?:[.,]\\d+)?/)?.[0]?.replace(',','.')||0)>=50;
+    var dc=Number(String(s.power||'').match(/\d+(?:[.,]\d+)?/)?.[0]?.replace(',','.')||0)>=50;
     var map=[
       ['trugo',9.95,14.98],['zes',10.99,16.49],['zorlu',10.99,16.49],['eşarj',9.90,13.50],['esarj',9.90,13.50],
       ['astor',9.89,13.99],['sharz',9.49,12.49],['voltrun',9.90,12.90],['wat',10.99,14.49],
