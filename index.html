@@ -757,7 +757,7 @@ html.mv-admin-start .adminOnly{
 .homeMapPopup{min-width:190px}
 .homeMapPopup strong{font-size:13px}
 .homeMapPopup .mpBrand{color:#16b968;font-weight:800;font-size:11px;margin:3px 0}
-.homeMapPopup .mpMeta{color:#61758a;font-size:11px}
+.homeMapPopup .mpMeta{color:#61758a;font-size:11px}.homeMapPopup .mpNavBtn{display:block;width:100%;margin-top:9px;padding:9px 10px;border:0;border-radius:10px;background:#35ef8d;color:#052112;font-weight:900;text-align:center;text-decoration:none;font-size:12px;box-sizing:border-box}.homeMapPopup .mpNavBtn:active{transform:scale(.98)}
 @media(max-width:480px){#homeStationMap{height:62vh;min-height:440px}.homeMapHead h3{font-size:18px}.mapExpandBtn{padding:8px 10px}}
 /* UFUK_MAP_LAYER_SWITCH_1007 */
 .homeMapLayerBtn{position:absolute;top:10px;right:10px;z-index:600;border:1px solid rgba(255,255,255,.18);background:rgba(7,17,29,.9);color:#fff;border-radius:11px;padding:8px 11px;font-size:11px;font-weight:800;box-shadow:0 6px 18px rgba(0,0,0,.25)}
@@ -5074,7 +5074,7 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
       var lat=Number(s.lat),lon=Number(s.lon); bounds.push([lat,lon]);
       var m=L.marker([lat,lon],{icon:makeIcon(s)});
       var p=priceText(s);
-      m.bindPopup('<div class="homeMapPopup"><strong>'+escMap(s.name)+'</strong><div class="mpBrand">'+escMap(s.operator||s.brand||'Şarj istasyonu')+'</div><div class="mpMeta">'+escMap(s.power||'')+(p&&p!=='—'?' · '+escMap(p)+'/kWh':' · Fiyat yok')+'</div></div>');
+      m.bindPopup('<div class="homeMapPopup"><strong>'+escMap(s.name)+'</strong><div class="mpBrand">'+escMap(s.operator||s.brand||'Şarj istasyonu')+'</div><div class="mpMeta">'+escMap(s.power||'')+(p&&p!=='—'?' · '+escMap(p)+'/kWh':' · Fiyat yok')+'</div><a class="mpNavBtn" href="https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(lat+','+lon)+'&travelmode=driving" target="_blank" rel="noopener">🧭 Yol Tarifi / Navigasyonu Başlat</a></div>');
       m.on('click',function(){if(typeof openDetail==='function')openDetail(s.id)});
       if(homeCluster)homeCluster.addLayer(m); else m.addTo(homeMap);
       homeMarkers.push(m);
