@@ -743,7 +743,7 @@ html.mv-admin-start .adminOnly{
 .homeMapHead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
 .mapExpandBtn{border:1px solid rgba(53,239,141,.24);background:rgba(53,239,141,.08);color:var(--green);border-radius:12px;padding:9px 12px;font-weight:800;font-size:12px}
 .homeMapWrap{position:relative;border:1px solid rgba(255,255,255,.12);border-radius:22px;overflow:hidden;background:#dfe7ef;box-shadow:0 14px 36px rgba(0,0,0,.24)}
-#homeStationMap{height:250px;width:100%;background:#dfe7ef}
+#homeStationMap{height:58vh;min-height:420px;width:100%;background:#dfe7ef}
 .homeMapLegend{position:absolute;left:10px;right:10px;bottom:10px;z-index:500;display:flex;justify-content:space-between;align-items:center;pointer-events:none}
 .homeMapLegend span{font-size:11px;font-weight:800;color:#eaf5ff;background:rgba(5,14,25,.84);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(10px);padding:7px 9px;border-radius:10px}
 .mapLegendDot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 0 3px rgba(53,239,141,.14);margin-right:5px}
@@ -758,11 +758,22 @@ html.mv-admin-start .adminOnly{
 .homeMapPopup strong{font-size:13px}
 .homeMapPopup .mpBrand{color:#16b968;font-weight:800;font-size:11px;margin:3px 0}
 .homeMapPopup .mpMeta{color:#61758a;font-size:11px}
-@media(max-width:480px){#homeStationMap{height:230px}.homeMapHead h3{font-size:18px}.mapExpandBtn{padding:8px 10px}}
+@media(max-width:480px){#homeStationMap{height:62vh;min-height:440px}.homeMapHead h3{font-size:18px}.mapExpandBtn{padding:8px 10px}}
 /* UFUK_MAP_LAYER_SWITCH_1007 */
 .homeMapLayerBtn{position:absolute;top:10px;right:10px;z-index:600;border:1px solid rgba(255,255,255,.18);background:rgba(7,17,29,.9);color:#fff;border-radius:11px;padding:8px 11px;font-size:11px;font-weight:800;box-shadow:0 6px 18px rgba(0,0,0,.25)}
 .homeMapLayerBtn.active{color:var(--green);border-color:rgba(53,239,141,.45)}
 /* UFUK_TURKEY_MAP_PRICE_CLUSTER_1007 */
+/* UFUK_HOME_MAP_FULLSCREEN_PRICE_TL_1007 */
+.homeMapFullscreen{position:fixed!important;inset:0!important;z-index:100001!important;width:100vw!important;height:100dvh!important;border-radius:0!important;border:0!important;background:#dfe7ef!important;box-shadow:none!important}
+.homeMapFullscreen #homeStationMap{height:100dvh!important;min-height:100dvh!important}
+.homeMapFullscreen .homeMapHead{display:none!important}
+.homeMapFullscreen .homeMapLegend{bottom:18px!important}
+.homeMapFullscreen .homeMapModeBtns{top:max(12px,env(safe-area-inset-top))!important;right:12px!important}
+.homeMapFullscreen .mapFullscreenClose{display:flex!important}
+.mapFullscreenClose{display:none;position:absolute;left:12px;top:max(12px,env(safe-area-inset-top));z-index:700;width:42px;height:42px;border:1px solid rgba(255,255,255,.2);border-radius:13px;background:rgba(7,17,29,.92);color:#fff;font-size:22px;font-weight:900;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(0,0,0,.3)}
+.mvMapMarker .mvPrice{font-size:10px;white-space:nowrap;font-weight:900}
+.mvMapMarker .mvPrice{letter-spacing:-.1px}
+
 .homeMapModeBtns{position:absolute;top:10px;right:10px;z-index:650;display:flex;gap:6px}
 .homeMapModeBtns button{border:1px solid rgba(255,255,255,.18);background:rgba(7,17,29,.92);color:#edf5ff;border-radius:10px;padding:8px 10px;font-size:11px;font-weight:800;box-shadow:0 6px 18px rgba(0,0,0,.25)}
 .homeMapModeBtns button.active{color:var(--green);border-color:rgba(53,239,141,.5)}
@@ -808,8 +819,8 @@ html.mv-admin-start .adminOnly{
     <div class="tab active" id="tab-home">
       <section class="section sponsorHomeSection"><h3>Şarj molası fırsatları</h3><p class="muted">Kodu al, kasada göster, indirim kazan</p><div class="sponsorWrap"><div class="sponsorScroll" id="sponsorCards"></div></div><div class="sponsorDots" id="sponsorDots"></div></section>
       <section class="section homeMapSection">
-        <div class="homeMapHead"><div><h3 style="margin:0">Yakındaki istasyonlar</h3><p class="muted" style="margin:4px 0 0">İstasyonları haritada hızlıca keşfet</p></div><button class="mapExpandBtn" type="button" onclick="showTab('stations')">Tümünü gör</button></div>
-        <div class="homeMapWrap"><div class="homeMapModeBtns"><button id="homeMapNearbyBtn" type="button" onclick="toggleHomeMapNearby()">Yakınım 100</button><button id="homeMapLayerBtn" type="button" onclick="toggleHomeMapLayer()">Uydu</button></div><div id="homeStationMap"></div><div class="homeMapLegend"><span><i class="mapLegendDot"></i> Yakındaki istasyonlar</span><span id="homeMapCount">0 yakın istasyon</span></div></div>
+        <div class="homeMapHead"><div><h3 style="margin:0">Yakındaki istasyonlar</h3><p class="muted" style="margin:4px 0 0">İstasyonları haritada hızlıca keşfet</p></div><button class="mapExpandBtn" type="button" onclick="openHomeMapFullscreen()">⛶ Tam ekran</button></div>
+        <div class="homeMapWrap"><button class="mapFullscreenClose" type="button" onclick="closeHomeMapFullscreen()" aria-label="Haritayı kapat">×</button><div class="homeMapModeBtns"><button id="homeMapNearbyBtn" type="button" onclick="toggleHomeMapNearby()">Yakınım 100</button><button id="homeMapLayerBtn" type="button" onclick="toggleHomeMapLayer()">Uydu</button></div><div id="homeStationMap"></div><div class="homeMapLegend"><span><i class="mapLegendDot"></i> Yakındaki istasyonlar</span><span id="homeMapCount">0 yakın istasyon</span></div></div>
       </section>
       <section class="section"><h3>Yakındaki istasyonlar</h3><p class="muted" id="countText">Yakındaki istasyonlar</p><p class="muted" id="locStatus" style="font-size:13px;margin-top:4px">Yakındaki istasyonlar konumuna göre sıralanır.</p><div class="sorts"><button id="sortDistance" class="sort active" onclick="setSort('distance')">En yakın</button><button id="sortName" class="sort" onclick="setSort('name')">A-Z</button></div><div class="cards" id="homeCards"></div></section>
     </div>
@@ -5025,11 +5036,11 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
   function escMap(v){return typeof esc==='function'?esc(String(v??'')):String(v??'').replace(/[&<>"']/g,function(m){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m]})}
   function priceText(s){
     var p=Number(s&&s.price);
-    if(Number.isFinite(p)&&p>0)return (s.priceFallback?'≈ ':'')+p.toFixed(2);
+    if(Number.isFinite(p)&&p>0)return (s.priceFallback?'≈ ':'')+p.toFixed(2)+' TL';
     var op=String((s&&s.operator)|| (s&&s.brand)||'').toLocaleLowerCase('tr-TR');
     var dc=Number(String(s&&s.power||'').match(/\d+(?:[.,]\d+)?/)?.[0]?.replace(',','.')||0)>=50;
     var m=[['trugo',9.95,14.98],['zes',10.99,16.49],['zorlu',10.99,16.49],['eşarj',9.90,13.50],['esarj',9.90,13.50],['astor',9.89,13.99],['sharz',9.49,12.49],['voltrun',9.90,12.90],['wat',10.99,14.49],['otopriz',9.90,13.90],['oncharge',9.99,13.50],['aksa',8.99,12.49],['360',8.99,11.49],['e-power',8.49,10.99],['epower',8.49,10.99],['myzco',9.90,11.90],['q charge',9.95,14.98],['ctg',9.49,12.49],['sepaş',8.99,10.99],['sepas',8.99,10.99]];
-    for(var i=0;i<m.length;i++)if(op.indexOf(m[i][0])>-1)return '≈ '+(dc?m[i][2]:m[i][1]).toFixed(2);
+    for(var i=0;i<m.length;i++)if(op.indexOf(m[i][0])>-1)return '≈ '+(dc?m[i][2]:m[i][1]).toFixed(2)+' TL';
     return '—';
   }
   function markerClass(s){
@@ -5063,7 +5074,7 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
       var lat=Number(s.lat),lon=Number(s.lon); bounds.push([lat,lon]);
       var m=L.marker([lat,lon],{icon:makeIcon(s)});
       var p=priceText(s);
-      m.bindPopup('<div class="homeMapPopup"><strong>'+escMap(s.name)+'</strong><div class="mpBrand">'+escMap(s.operator||s.brand||'Şarj istasyonu')+'</div><div class="mpMeta">'+escMap(s.power||'')+(p&&p!=='—'?' · '+escMap(p)+' TL/kWh':' · Fiyat yok')+'</div></div>');
+      m.bindPopup('<div class="homeMapPopup"><strong>'+escMap(s.name)+'</strong><div class="mpBrand">'+escMap(s.operator||s.brand||'Şarj istasyonu')+'</div><div class="mpMeta">'+escMap(s.power||'')+(p&&p!=='—'?' · '+escMap(p)+'/kWh':' · Fiyat yok')+'</div></div>');
       m.on('click',function(){if(typeof openDetail==='function')openDetail(s.id)});
       if(homeCluster)homeCluster.addLayer(m); else m.addTo(homeMap);
       homeMarkers.push(m);
@@ -5084,7 +5095,21 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
     if(b){b.textContent=homeNearbyOnly?'Türkiye geneli':'Yakınım 100';b.classList.toggle('active',homeNearbyOnly)}
     setTimeout(function(){homeMap.invalidateSize()},120);
   }
-  window.toggleHomeMapNearby=function(){homeNearbyOnly=!homeNearbyOnly;renderHomeStationMap()};
+  window.openHomeMapFullscreen=function(){
+    var wrap=document.querySelector('.homeMapWrap');
+    if(!wrap)return;
+    wrap.classList.add('homeMapFullscreen');
+    document.body.style.overflow='hidden';
+    setTimeout(function(){if(homeMap)homeMap.invalidateSize()},120);
+};
+window.closeHomeMapFullscreen=function(){
+    var wrap=document.querySelector('.homeMapWrap');
+    if(!wrap)return;
+    wrap.classList.remove('homeMapFullscreen');
+    document.body.style.overflow='';
+    setTimeout(function(){if(homeMap)homeMap.invalidateSize()},120);
+};
+window.toggleHomeMapNearby=function(){homeNearbyOnly=!homeNearbyOnly;renderHomeStationMap()};
   window.toggleHomeMapLayer=function(){
     if(!homeMap||!homeBaseLayer||!homeSatelliteLayer)return;
     if(homeSatellite){homeMap.removeLayer(homeSatelliteLayer);homeBaseLayer.addTo(homeMap)}
@@ -5094,6 +5119,7 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
     if(b){b.textContent=homeSatellite?'Harita':'Uydu';b.classList.toggle('active',homeSatellite)}
     setTimeout(function(){homeMap.invalidateSize()},80);
   };
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')window.closeHomeMapFullscreen();});
   window.renderHomeStationMap=renderHomeStationMap;
   window.addEventListener('load',function(){setTimeout(renderHomeStationMap,900)});
   document.addEventListener('DOMContentLoaded',function(){setTimeout(renderHomeStationMap,1400)});
