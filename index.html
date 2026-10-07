@@ -771,7 +771,7 @@ html.mv-admin-start .adminOnly{
 .homeMapFullscreen .homeMapModeBtns{top:max(12px,env(safe-area-inset-top))!important;right:12px!important}
 .homeMapFullscreen .mapFullscreenClose{display:flex!important}
 .mapFullscreenClose{display:none;position:absolute;left:12px;top:max(12px,env(safe-area-inset-top));z-index:700;width:42px;height:42px;border:1px solid rgba(255,255,255,.2);border-radius:13px;background:rgba(7,17,29,.92);color:#fff;font-size:22px;font-weight:900;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(0,0,0,.3)}
-.mvMapMarker .mvPrice{font-size:10px;white-space:nowrap;font-weight:900}
+.mvMapMarker .mvPrice{font-size:10px;white-space:nowrap;font-weight:900;letter-spacing:-.15px}
 .mvMapMarker .mvPrice{letter-spacing:-.1px}
 
 .homeMapModeBtns{position:absolute;top:10px;right:10px;z-index:650;display:flex;gap:6px}
@@ -5036,11 +5036,11 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
   function escMap(v){return typeof esc==='function'?esc(String(v??'')):String(v??'').replace(/[&<>"']/g,function(m){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m]})}
   function priceText(s){
     var p=Number(s&&s.price);
-    if(Number.isFinite(p)&&p>0)return (s.priceFallback?'≈ ':'')+p.toFixed(2)+' TL';
+    if(Number.isFinite(p)&&p>0)return (s.priceFallback?'≈ ':'')+p.toFixed(2).replace('.',',')+' ₺';
     var op=String((s&&s.operator)|| (s&&s.brand)||'').toLocaleLowerCase('tr-TR');
     var dc=Number(String(s&&s.power||'').match(/\d+(?:[.,]\d+)?/)?.[0]?.replace(',','.')||0)>=50;
     var m=[['trugo',9.95,14.98],['zes',10.99,16.49],['zorlu',10.99,16.49],['eşarj',9.90,13.50],['esarj',9.90,13.50],['astor',9.89,13.99],['sharz',9.49,12.49],['voltrun',9.90,12.90],['wat',10.99,14.49],['otopriz',9.90,13.90],['oncharge',9.99,13.50],['aksa',8.99,12.49],['360',8.99,11.49],['e-power',8.49,10.99],['epower',8.49,10.99],['myzco',9.90,11.90],['q charge',9.95,14.98],['ctg',9.49,12.49],['sepaş',8.99,10.99],['sepas',8.99,10.99]];
-    for(var i=0;i<m.length;i++)if(op.indexOf(m[i][0])>-1)return '≈ '+(dc?m[i][2]:m[i][1]).toFixed(2)+' TL';
+    for(var i=0;i<m.length;i++)if(op.indexOf(m[i][0])>-1)return '≈ '+(dc?m[i][2]:m[i][1]).toFixed(2).replace('.',',')+' ₺';
     return '—';
   }
   function markerClass(s){
