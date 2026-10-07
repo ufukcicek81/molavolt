@@ -5193,11 +5193,11 @@ window.toggleHomeMapNearby=function(){homeNearbyOnly=!homeNearbyOnly;renderHomeS
       if(typeof v!=='object')return;
       Object.keys(v).forEach(function(k){
         var val=v[k], kl=String(k).toLocaleLowerCase('tr-TR');
-        var specific=/müsait|musait|uygun|available|availability|soketdurum|socketstatus|kullanimdurum|usage.?status/.test(kl);
+        var specific=/müsait|musait|uygun|available|availability|soket.*durum|socket.*status|kullanim|kullanım|durum|status|state|rezerv|reserve|occupied|doluluk/.test(kl);
         var socketList=/soket|socket|connector|sarj.?unit|charge.?point/.test(kl);
         if(typeof val==='boolean' && specific){
           found=true;counts.total++;counts[val?'ok':'busy']++;
-        }else if((specific || (isSocket && /(^|_|)durum|status|state/.test(kl))) && (typeof val==='string'||typeof val==='number')){
+        }else if((specific || (isSocket && /durum|status|state|availability|müsait|musait|kullanim|kullanım/.test(kl))) && (typeof val==='string'||typeof val==='number')){
           var cls=classify(val,kl,isSocket);if(cls){found=true;counts.total++;counts[cls]++}
         }
         if(val&&typeof val==='object')visit(val,depth+1,isSocket||socketList);
