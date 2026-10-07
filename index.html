@@ -5185,6 +5185,12 @@ window.toggleHomeMapNearby=function(){homeNearbyOnly=!homeNearbyOnly;renderHomeS
     return '';
   }
   function availabilityFromRaw(raw){
+    if(raw&&raw.molavoltAvailability&&raw.molavoltAvailability.key){
+      return {key:raw.molavoltAvailability.key,label:raw.molavoltAvailability.label||'Müsaitlik bilinmiyor',counts:raw.molavoltAvailability.counts||{ok:0,busy:0,off:0,total:0}};
+    }
+    if(raw&&(raw.availabilityKey||raw.availabilityLabel)){
+      return {key:raw.availabilityKey||'unknown',label:raw.availabilityLabel||'Müsaitlik bilinmiyor',counts:{ok:0,busy:0,off:0,total:0}};
+    }
     var counts={ok:0,busy:0,off:0,total:0}, found=false;
     function visit(v,depth,isSocket){
       if(depth>6||v==null)return;
