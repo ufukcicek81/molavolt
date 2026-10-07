@@ -5289,7 +5289,24 @@ window.toggleHomeMapNearby=function(){homeNearbyOnly=!homeNearbyOnly;renderHomeS
   var oldRenderAll=renderAll;
   renderAll=function(){renderAvailabilityFilters();oldRenderAll()};
 
-  window.addEventListener('load',function(){setTimeout(function(){renderAvailabilityFilters();applyFilters()},1200)});
+  async function refreshAvailabilitySilently(){
+    try{
+      var current=epdkStations();
+      var needs=!current.length||current.filter(function(s){return s.availabilityKey==='unknown'||!s.availabilityKey}).length>Math.max(10,current.length*0.75);
+      if(!needs)return;
+      var res=await fetch(DEFAULT_EPDK_URL,{cache:'no-store'});
+      if(!res.ok)return;
+      var data=await res.json();
+      var list=normalizeEpdkData(data);
+      if(list.length){
+        clearLegacySilent();
+        setEpdkStations(list);
+        buildStations();
+        applyFilters();
+      }
+    }catch(e){console.warn('MolaVolt müsaitlik yenileme:',e)}
+  }
+  window.addEventListener('load',function(){setTimeout(function(){renderAvailabilityFilters();applyFilters();refreshAvailabilitySilently()},1200)});
 })();
 </script>
 </body>
