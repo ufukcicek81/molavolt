@@ -740,8 +740,8 @@ html.mv-admin-start .adminOnly{
 .homeMapSection{padding-top:2px}
 .homeMapHead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
 .mapExpandBtn{border:1px solid rgba(53,239,141,.24);background:rgba(53,239,141,.08);color:var(--green);border-radius:12px;padding:9px 12px;font-weight:800;font-size:12px}
-.homeMapWrap{position:relative;border:1px solid rgba(255,255,255,.12);border-radius:22px;overflow:hidden;background:#0b1725;box-shadow:0 14px 36px rgba(0,0,0,.24)}
-#homeStationMap{height:250px;width:100%;background:#0b1725}
+.homeMapWrap{position:relative;border:1px solid rgba(255,255,255,.12);border-radius:22px;overflow:hidden;background:#dfe7ef;box-shadow:0 14px 36px rgba(0,0,0,.24)}
+#homeStationMap{height:250px;width:100%;background:#dfe7ef}
 .homeMapLegend{position:absolute;left:10px;right:10px;bottom:10px;z-index:500;display:flex;justify-content:space-between;align-items:center;pointer-events:none}
 .homeMapLegend span{font-size:11px;font-weight:800;color:#eaf5ff;background:rgba(5,14,25,.84);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(10px);padding:7px 9px;border-radius:10px}
 .mapLegendDot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 0 3px rgba(53,239,141,.14);margin-right:5px}
@@ -5013,7 +5013,7 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
     var list=Array.isArray(stations)?stations.filter(function(s){return Number.isFinite(Number(s.lat))&&Number.isFinite(Number(s.lon));}).sort(function(a,b){return (Number(a.distance)||999999)-(Number(b.distance)||999999);}).slice(0,25):[];
     if(!homeMap){
       homeMap=L.map(el,{zoomControl:true,attributionControl:true,scrollWheelZoom:false,dragging:true,doubleClickZoom:true,touchZoom:true}).setView([39.0,35.0],6);
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{subdomains:'abcd',maxZoom:19,attribution:'&copy; OpenStreetMap &copy; CARTO'}).addTo(homeMap);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{subdomains:'abc',maxZoom:19,crossOrigin:true,attribution:'&copy; OpenStreetMap katkıda bulunanları'}).addTo(homeMap);
     }
     homeMarkers.forEach(function(m){try{homeMap.removeLayer(m)}catch(e){}});
     homeMarkers=[];
