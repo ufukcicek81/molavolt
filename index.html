@@ -757,6 +757,9 @@ html.mv-admin-start .adminOnly{
 .homeMapPopup .mpBrand{color:#16b968;font-weight:800;font-size:11px;margin:3px 0}
 .homeMapPopup .mpMeta{color:#61758a;font-size:11px}
 @media(max-width:480px){#homeStationMap{height:230px}.homeMapHead h3{font-size:18px}.mapExpandBtn{padding:8px 10px}}
+/* UFUK_MAP_LAYER_SWITCH_1007 */
+.homeMapLayerBtn{position:absolute;top:10px;right:10px;z-index:600;border:1px solid rgba(255,255,255,.18);background:rgba(7,17,29,.9);color:#fff;border-radius:11px;padding:8px 11px;font-size:11px;font-weight:800;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+.homeMapLayerBtn.active{color:var(--green);border-color:rgba(53,239,141,.45)}
 </style>
 <script>
 /* UFUK_REFRESH_NO_FLASH_ROUTE_FAST_0633: yenilemede yanlış/admin ekranı parlamasını engeller */
@@ -795,7 +798,7 @@ html.mv-admin-start .adminOnly{
       <section class="section sponsorHomeSection"><h3>Şarj molası fırsatları</h3><p class="muted">Kodu al, kasada göster, indirim kazan</p><div class="sponsorWrap"><div class="sponsorScroll" id="sponsorCards"></div></div><div class="sponsorDots" id="sponsorDots"></div></section>
       <section class="section homeMapSection">
         <div class="homeMapHead"><div><h3 style="margin:0">Yakındaki istasyonlar</h3><p class="muted" style="margin:4px 0 0">İstasyonları haritada hızlıca keşfet</p></div><button class="mapExpandBtn" type="button" onclick="showTab('stations')">Tümünü gör</button></div>
-        <div class="homeMapWrap"><div id="homeStationMap"></div><div class="homeMapLegend"><span><i class="mapLegendDot"></i> Yakındaki istasyonlar</span><span id="homeMapCount">0 yakın istasyon</span></div></div>
+        <div class="homeMapWrap"><button id="homeMapLayerBtn" class="homeMapLayerBtn" type="button" onclick="toggleHomeMapLayer()">Uydu</button><div id="homeStationMap"></div><div class="homeMapLegend"><span><i class="mapLegendDot"></i> Yakındaki istasyonlar</span><span id="homeMapCount">0 yakın istasyon</span></div></div>
       </section>
       <section class="section"><h3>Yakındaki istasyonlar</h3><p class="muted" id="countText">Yakındaki istasyonlar</p><p class="muted" id="locStatus" style="font-size:13px;margin-top:4px">Yakındaki istasyonlar konumuna göre sıralanır.</p><div class="sorts"><button id="sortDistance" class="sort active" onclick="setSort('distance')">En yakın</button><button id="sortName" class="sort" onclick="setSort('name')">A-Z</button></div><div class="cards" id="homeCards"></div></section>
     </div>
@@ -5005,7 +5008,7 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
 <script>
 /* UFUK_HOME_MINI_MAP_1007 */
 (function(){
-  var homeMap=null, homeMarkers=[];
+  var homeMap=null, homeMarkers=[], homeBaseLayer=null, homeSatelliteLayer=null, homeSatellite=false;
   function escMap(v){return typeof esc==='function'?esc(String(v??'')):String(v??'').replace(/[&<>"']/g,function(m){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m]})}
   function markerClass(s){var p=String(s.power||'');var n=Number((p.match(/\\d+(?:[.,]\\d+)?/)||['0'])[0].replace(',','.'));return n>=100?'fast':(n>=50?'dc':'')}
   function renderHomeStationMap(){
@@ -5013,7 +5016,9 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
     var list=Array.isArray(stations)?stations.filter(function(s){return Number.isFinite(Number(s.lat))&&Number.isFinite(Number(s.lon));}).sort(function(a,b){return (Number(a.distance)||999999)-(Number(b.distance)||999999);}).slice(0,25):[];
     if(!homeMap){
       homeMap=L.map(el,{zoomControl:true,attributionControl:true,scrollWheelZoom:false,dragging:true,doubleClickZoom:true,touchZoom:true}).setView([39.0,35.0],6);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{subdomains:'abc',maxZoom:19,crossOrigin:true,attribution:'&copy; OpenStreetMap katkıda bulunanları'}).addTo(homeMap);
+      homeBaseLayer=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{subdomains:'abc',maxZoom:19,crossOrigin:true,attribution:'&copy; OpenStreetMap katkıda bulunanları'});
+      homeSatelliteLayer=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles &copy; Esri'});
+      homeBaseLayer.addTo(homeMap);
     }
     homeMarkers.forEach(function(m){try{homeMap.removeLayer(m)}catch(e){}});
     homeMarkers=[];
@@ -5036,7 +5041,16 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
     var count=document.getElementById('homeMapCount');if(count)count.textContent=list.length+' yakın istasyon';
     setTimeout(function(){homeMap.invalidateSize()},100);
   }
-  window.renderHomeStationMap=renderHomeStationMap;
+  window.toggleHomeMapLayer=function(){
+  if(!homeMap||!homeBaseLayer||!homeSatelliteLayer)return;
+  if(homeSatellite){homeMap.removeLayer(homeSatelliteLayer);homeBaseLayer.addTo(homeMap);}
+  else{homeMap.removeLayer(homeBaseLayer);homeSatelliteLayer.addTo(homeMap);}
+  homeSatellite=!homeSatellite;
+  var b=document.getElementById('homeMapLayerBtn');
+  if(b){b.textContent=homeSatellite?'Harita':'Uydu';b.classList.toggle('active',homeSatellite);}
+  setTimeout(function(){homeMap.invalidateSize()},80);
+};
+window.renderHomeStationMap=renderHomeStationMap;
   window.addEventListener('load',function(){setTimeout(renderHomeStationMap,700)});
   document.addEventListener('DOMContentLoaded',function(){setTimeout(renderHomeStationMap,1200)});
 })();
