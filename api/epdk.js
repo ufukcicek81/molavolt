@@ -32,10 +32,11 @@ export default async function handler(req, res) {
   function power(o){return firstValue(o,["soketGucu","soketGücü","guc","güç","kw","power","gucKw","maxGuc","maxGüç"])}
   function socketType(o){return firstValue(o,["soketTipi","soketTuru","socketType","connectorType","tip","konnektorTipi"])}
   function availabilityScan(o,depth=0,counts={ok:0,busy:0,off:0,total:0},seen={hit:false}){
-    if(!o||typeof o!=="object"||depth>7)return {counts,hit:seen.hit};
+    o=parseMaybe(o);
+    if(!o||typeof o!=="object"||depth>8)return {counts,hit:seen.hit};
     if(Array.isArray(o)){o.forEach(x=>availabilityScan(x,depth+1,counts,seen));return {counts,hit:seen.hit};}
     for(const k of Object.keys(o)){
-      const v=o[k], key=String(k).toLocaleLowerCase("tr-TR");
+      let v=parseMaybe(o[k]), key=String(k).toLocaleLowerCase("tr-TR");
       const isAvail=/(müsait|musait|uygunluk|uygun|availability|available|kullanim|kullanım|usage|socket.?status|soket.?durum|durum|status|state)/i.test(key);
       if(isAvail&&(typeof v==="boolean"||typeof v==="string"||typeof v==="number")){
         const s=String(v).toLocaleLowerCase("tr-TR").trim();
@@ -44,8 +45,8 @@ export default async function handler(req, res) {
         else if(/ar[ıi]za|bak[ıi]m|offline|out.?of.?service|fault|hata|devre.?d[ıi]ş[ıi]/i.test(s)) cls="off";
         else if(/dolu|occupied|in.?use|meşgul|kullan[ıi]l[ıi]yor|rezerve|reserved/i.test(s)) cls="busy";
         else if(/müsait|musait|uygun|available|free|boş|boşta|ready|haz[ıi]r|aktif|available/i.test(s)) cls="ok";
-        else if(/^(1|true|yes|evet)$/i.test(s)) cls="ok";
-        else if(/^(0|false|no|hayır)$/i.test(s)) cls="busy";
+        else if(/^(1|true|yes|evet|müsait|musait|available|free|ready)$/i.test(s)) cls="ok";
+        else if(/^(0|false|no|hayır|dolu|occupied|busy|unavailable)$/i.test(s)) cls="busy";
         if(cls){seen.hit=true;counts.total++;counts[cls]++;}
       }
       if(v&&typeof v==="object")availabilityScan(v,depth+1,counts,seen);
