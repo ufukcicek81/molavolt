@@ -814,8 +814,10 @@ html.mv-admin-start .adminOnly{
   </div>
 
   <main class="customerOnly">
-    <div class="search"><span>🔎</span><input id="searchInput" placeholder="Konum veya istasyon ara" autocomplete="off" autocapitalize="off" spellcheck="false" oninput="stableSearch()" onkeyup="stableSearch()" onchange="stableSearch()"><button class="menuBtn" onclick="openModal('infoModal')">≡</button></div>
+    <div class="search"><span>🔎</span><input id="searchInput" placeholder="İstasyon, marka veya şehir ara" autocomplete="off" autocapitalize="off" spellcheck="false" oninput="stableSearch()" onkeyup="stableSearch()" onchange="stableSearch()"><button class="menuBtn" onclick="openModal('infoModal')">≡</button></div>
+    <div class="mvServiceBanner"><span>⚡</span><div><b>MolaVolt ile ödeme & şarj</b><small>Yakında hizmete girecek. Şimdilik istasyon bilgileri ve müsaitlik burada.</small></div></div>
     <div class="chips" id="brandChips"></div>
+    <div class="availabilityFilters" id="availabilityFilters"></div>
     <div class="tab active" id="tab-home">
       <section class="section sponsorHomeSection"><h3>Şarj molası fırsatları</h3><p class="muted">Kodu al, kasada göster, indirim kazan</p><div class="sponsorWrap"><div class="sponsorScroll" id="sponsorCards"></div></div><div class="sponsorDots" id="sponsorDots"></div></section>
       <section class="section homeMapSection">
@@ -914,7 +916,7 @@ html.mv-admin-start .adminOnly{
 
     <div class="tab" id="tab-favorites"><section class="section"><h3>Favoriler</h3><div class="cards" id="favCards"></div></section></div>
     <div class="tab" id="tab-report"><section class="section"><h3>Eksik istasyon bildir</h3><p class="muted">Görünmeyen şarj noktasını bize gönder</p><div class="panel"><a class="routeBtn" style="display:block;padding:14px" href="https://wa.me/905327664404?text=MolaVolt%20eksik%20%C5%9Farj%20istasyonu%20bildirimi:%0A%C4%B0stasyon%20ad%C4%B1:%0AMarka:%0AKonum%20linki:%0ANot:" target="_blank" rel="noopener">WhatsApp ile bildir</a></div></section></div>
-    <div class="tab" id="tab-profile"><section class="section"><h3>Profil</h3><p class="muted">MolaVolt</p><div class="panel"><b>MolaVolt</b><p class="muted">Yakındaki şarj istasyonlarını bul, haritada gör ve yol tarifini hemen al.</p></div><div class="panel" style="margin-top:12px"><h3 style="font-size:18px">Destek</h3><p class="muted">Öneri, hata bildirimi veya destek için bize ulaş.</p><a class="routeBtn" style="display:block;text-align:center;margin-top:8px" href="https://wa.me/905327664404?text=MolaVolt%20destek%20talebi:%20" target="_blank" rel="noopener">WhatsApp destek</a></div><div class="panel" style="margin-top:12px"><h3 style="font-size:18px">Fırsat kodlarım</h3><p class="muted">Kullandığın fırsatı buradan onaylayabilirsin.</p><div id="myCouponCards"></div></div></section></div>
+    <div class="tab" id="tab-profile"><section class="section"><h3>Profil</h3><p class="muted">MolaVolt</p><div class="panel"><b>MolaVolt</b><p class="muted">Yakındaki şarj istasyonlarını bul, haritada gör ve yol tarifini hemen al.</p></div><div class="panel" style="margin-top:12px"><h3 style="font-size:18px">Destek</h3><p class="muted">Öneri, hata bildirimi veya destek için bize ulaş.</p><a class="routeBtn" style="display:block;text-align:center;margin-top:8px" href="https://wa.me/905327664404?text=MolaVolt%20destek%20talebi:%20" target="_blank" rel="noopener">WhatsApp destek</a></div><div class="panel" style="margin-top:12px"><h3 style="font-size:18px">Fırsat kodlarım</h3><p class="muted">Kullandığın fırsatı buradan onaylayabilirsin.</p><div id="myCouponCards"></div></div><div class="profileQuick"><button class="secondaryBtn" onclick="showTab('favorites')">♡ Favoriler</button><button class="secondaryBtn" onclick="showTab('report')">⚑ İstasyon bildir</button></div></section></div>
   </main>
 
   <main class="adminOnly" id="adminPage">
@@ -998,8 +1000,6 @@ html.mv-admin-start .adminOnly{
   <button class="navItem active" id="nav-home" onclick="showTab('home')"><span class="navIcon"><svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5"/><path d="M9.5 20v-6h5v6"/></svg></span><span>Ana</span></button>
   <button class="navItem" id="nav-stations" onclick="showTab('stations')"><span class="navIcon"><svg viewBox="0 0 24 24"><path d="M12 21s6-5.4 6-11a6 6 0 1 0-12 0c0 5.6 6 11 6 11Z"/><circle cx="12" cy="10" r="2.5"/></svg></span><span>İstasyon</span></button>
   <button class="navItem" id="nav-route" onclick="showTab('route')"><span class="navIcon"><svg viewBox="0 0 24 24"><path d="M9 18H5a3 3 0 0 1 0-6h14a3 3 0 0 0 0-6h-4"/><path d="M9 14l3 4-3 4"/><path d="M15 10l-3-4 3-4"/></svg></span><span>Rota</span></button>
-  <button class="navItem" id="nav-favorites" onclick="showTab('favorites')"><span class="navIcon"><svg viewBox="0 0 24 24"><path d="M20.8 5.6a5.2 5.2 0 0 0-7.4 0L12 7l-1.4-1.4a5.2 5.2 0 1 0-7.4 7.4L12 21l8.8-8a5.2 5.2 0 0 0 0-7.4Z"/></svg></span><span>Favori</span></button>
-  <button class="navItem" id="nav-report" onclick="showTab('report')"><span class="navIcon"><svg viewBox="0 0 24 24"><path d="M12 22a2.5 2.5 0 0 0 2.4-2h-4.8A2.5 2.5 0 0 0 12 22Z"/><path d="M18 16v-5a6 6 0 1 0-12 0v5l-2 2h16l-2-2Z"/></svg></span><span>Bildir</span></button>
   <button class="navItem" id="nav-profile" onclick="showTab('profile')"><span class="navIcon"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></span><span>Profil</span></button>
 </nav>
 <div class="modal" id="mapModal"><div class="sheet"><button class="close" onclick="closeStationMap()">×</button><h2 id="mapModalTitle">Haritada gör</h2><p class="muted" id="mapModalText">İstasyon konumu</p><div class="mapSheetBody"><div id="stationMap"></div></div><div class="cardActions"><button class="secondaryBtn" onclick="closeStationMap()">Kapat</button><a class="routeBtn" id="mapModalRoute" href="#" target="_blank" rel="noopener">Yol tarifi</a></div></div></div>
@@ -5125,5 +5125,166 @@ window.toggleHomeMapNearby=function(){homeNearbyOnly=!homeNearbyOnly;renderHomeS
   document.addEventListener('DOMContentLoaded',function(){setTimeout(renderHomeStationMap,1400)});
 })();</script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+<style>
+/* UFUK_CLEAN_UI_AVAILABILITY_PAYMENT_1007 */
+.mvServiceBanner{display:flex;align-items:center;gap:10px;margin-top:12px;padding:11px 13px;border:1px solid rgba(57,170,255,.18);background:linear-gradient(135deg,rgba(57,170,255,.10),rgba(53,239,141,.07));border-radius:17px}
+.mvServiceBanner>span{width:34px;height:34px;display:grid;place-items:center;border-radius:12px;background:rgba(53,239,141,.12);font-size:18px}
+.mvServiceBanner b{display:block;font-size:13px}.mvServiceBanner small{display:block;color:var(--muted);font-size:11px;line-height:1.3;margin-top:2px}
+.availabilityFilters{display:flex;gap:7px;overflow-x:auto;scrollbar-width:none;padding:10px 0 0}
+.availabilityFilters::-webkit-scrollbar{display:none}
+.availFilter{border:1px solid var(--line);background:rgba(255,255,255,.035);color:#cfe0f2;border-radius:999px;padding:8px 12px;font-size:12px;font-weight:800;white-space:nowrap}
+.availFilter.active{background:rgba(53,239,141,.13);border-color:rgba(53,239,141,.28);color:var(--green)}
+.availFilter .n{opacity:.72;margin-left:4px}
+.availBadge{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:5px 8px;font-size:11px;font-weight:900;border:1px solid var(--line);white-space:nowrap}
+.availBadge.ok{background:rgba(53,239,141,.12);border-color:rgba(53,239,141,.25);color:#9bffc4}
+.availBadge.busy{background:rgba(255,224,129,.11);border-color:rgba(255,224,129,.24);color:#ffe9a6}
+.availBadge.off{background:rgba(255,100,100,.10);border-color:rgba(255,100,100,.22);color:#ffb2b2}
+.availBadge.unknown{background:rgba(255,255,255,.05);color:#9eb1c7}
+.station .tags{align-items:center}
+.station .cardActions{margin-top:12px!important}
+.station .stationPrice{font-size:12px}
+.mvPaymentSoon{margin-top:14px;padding:13px;border:1px solid rgba(53,239,141,.22);background:rgba(53,239,141,.065);border-radius:18px}
+.mvPaymentSoon b{display:block;font-size:14px}.mvPaymentSoon p{margin:4px 0 0;color:var(--muted);font-size:12px;line-height:1.35}
+.mvPaymentSoon button{width:100%;margin-top:9px;border:0;border-radius:13px;padding:11px;background:linear-gradient(135deg,var(--green),#12c873);color:#052112;font-weight:900}
+.profileQuick{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.homeMapSection{margin-top:18px}.sponsorHomeSection{margin-top:18px}
+.section{margin-top:18px}.section h3{font-size:22px}
+@media(max-width:390px){.profileQuick{grid-template-columns:1fr}.mvServiceBanner{padding:10px 11px}}
+</style>
+<div class="modal" id="paymentSoonModal"><div class="sheet"><button class="close" onclick="closeModal('paymentSoonModal')">×</button><div class="mvPaymentSoon" style="margin-top:42px"><div style="font-size:28px;margin-bottom:6px">⚡</div><b>MolaVolt ile ödeme ve şarj başlatma</b><p>Bu özellik roaming ve operatör entegrasyonları tamamlandığında aktif olacak. Şu anda MolaVolt üzerinden istasyon, fiyat ve müsaitlik bilgilerini görebilirsin.</p><button onclick="closeModal('paymentSoonModal')">Tamam</button></div></div></div>
+<script>
+/* UFUK_CLEAN_UI_AVAILABILITY_PAYMENT_1007_JS */
+(function(){
+  function rowsFromAny(data){
+    try{
+      data=parseMaybe(data);
+      var cols=data&&Array.isArray(data.columnNames)?data.columnNames:[];
+      var out=[];
+      function walk(v,depth){
+        if(depth>5||v==null)return;
+        v=parseMaybe(v);
+        if(Array.isArray(v)){v.forEach(x=>{if(x&&typeof x==='object')out.push(rowObject(x,cols));});return;}
+        if(typeof v!=='object')return;
+        ['rows','result','data','items','records','list','content'].forEach(k=>{if(v[k]!==undefined)walk(v[k],depth+1)});
+      }
+      walk(data,0);
+      return out;
+    }catch(e){return []}
+  }
+  function classify(v,key,isSocket){
+    if(typeof v==='boolean'){
+      if(/available|availability|müsait|uygun/i.test(key))return v?'ok':'busy';
+      return '';
+    }
+    var s=String(v??'').toLocaleLowerCase('tr-TR').trim();
+    if(!s)return '';
+    if(/ar[ıi]za|bak[ıi]m|out.?of.?service|offline|fault|hata|devre.?d[ıi]ş[ıi]/i.test(s))return 'off';
+    if(/dolu|occupied|in.?use|meşgul|kullan[ıi]l[ıi]yor|rezerve|reserved/i.test(s))return 'busy';
+    if(/müsait|uygun|boş|boşta|available|free|ready|haz[ıi]r/i.test(s))return 'ok';
+    return '';
+  }
+  function availabilityFromRaw(raw){
+    var counts={ok:0,busy:0,off:0,total:0}, found=false;
+    function visit(v,depth,isSocket){
+      if(depth>6||v==null)return;
+      v=parseMaybe(v);
+      if(Array.isArray(v)){v.forEach(x=>visit(x,depth+1,isSocket));return}
+      if(typeof v!=='object')return;
+      Object.keys(v).forEach(function(k){
+        var val=v[k], kl=String(k).toLocaleLowerCase('tr-TR');
+        var specific=/müsait|musait|uygun|available|availability|soketdurum|socketstatus|kullanimdurum|usage.?status/.test(kl);
+        var socketList=/soket|socket|connector|sarj.?unit|charge.?point/.test(kl);
+        if(typeof val==='boolean' && specific){
+          found=true;counts.total++;counts[val?'ok':'busy']++;
+        }else if((specific || (isSocket && /(^|_|)durum|status|state/.test(kl))) && (typeof val==='string'||typeof val==='number')){
+          var cls=classify(val,kl,isSocket);if(cls){found=true;counts.total++;counts[cls]++}
+        }
+        if(val&&typeof val==='object')visit(val,depth+1,isSocket||socketList);
+      });
+    }
+    visit(raw,0,false);
+    if(!found)return {key:'unknown',label:'Müsaitlik bilinmiyor',counts:counts};
+    if(counts.ok>0 && counts.total>1)return {key:'ok',label:counts.ok===counts.total?'Müsait':counts.ok+'/'+counts.total+' müsait',counts:counts};
+    if(counts.ok>0)return {key:'ok',label:'Müsait',counts:counts};
+    if(counts.busy===counts.total)return {key:'busy',label:'Dolu',counts:counts};
+    if(counts.off===counts.total)return {key:'off',label:'Arızalı / bakım',counts:counts};
+    if(counts.busy>0)return {key:'busy',label:'Kısmen dolu',counts:counts};
+    return {key:'unknown',label:'Müsaitlik bilinmiyor',counts:counts};
+  }
+  var oldNormalizeAvailability=normalizeEpdkData;
+  normalizeEpdkData=function(data){
+    var list=oldNormalizeAvailability(data)||[], rows=rowsFromAny(data), map=new Map();
+    rows.forEach(function(r){
+      var lat=toNum(pick(r,['enlem','lat','latitude','koordinatx','koordinatX'])),lon=toNum(pick(r,['boylam','lon','lng','longitude','koordinaty','koordinatY']));
+      if(Number.isFinite(lat)&&Number.isFinite(lon))map.set(lat.toFixed(5)+'|'+lon.toFixed(5),availabilityFromRaw(r));
+    });
+    return list.map(function(s){
+      var a=map.get(Number(s.lat).toFixed(5)+'|'+Number(s.lon).toFixed(5));
+      return Object.assign({},s,a||{key:'unknown',label:'Müsaitlik bilinmiyor',counts:{ok:0,busy:0,off:0,total:0}});
+    });
+  };
+
+  function availBadge(s){
+    var a=s&&s.availabilityKey?s:{availabilityKey:s&&s.key||'unknown',availabilityLabel:s&&s.label};
+    var key=a.availabilityKey||'unknown', label=a.availabilityLabel||'Müsaitlik bilinmiyor';
+    var icon=key==='ok'?'●':(key==='busy'?'◐':(key==='off'?'×':'•'));
+    return '<span class="availBadge '+key+'">'+icon+' '+esc(label)+'</span>';
+  }
+  function normalizedAvailability(s){
+    return {availabilityKey:s.availabilityKey||'unknown',availabilityLabel:s.availabilityLabel||'Müsaitlik bilinmiyor'};
+  }
+  function paymentSoon(){openModal('paymentSoonModal')}
+
+  var oldStationCardClean=stationCard;
+  stationCard=function(s){
+    var a=normalizedAvailability(s), html=oldStationCardClean(s);
+    html=html.replace('<span class="tag b">'+esc(s.status)+'</span>','<span class="tag b">'+esc(s.status)+'</span>'+availBadge(s));
+    return html;
+  };
+
+  var oldOpenDetailClean=openDetail;
+  openDetail=function(id){
+    oldOpenDetailClean(id);
+    var s=stations.find(function(x){return x.id===id});
+    var box=$('detailContent');
+    if(!s||!box)return;
+    var a=normalizedAvailability(s);
+    var notice='<div class="mvPaymentSoon"><b>⚡ MolaVolt ile şarj</b><p>Ödeme ve şarj başlatma özelliği roaming/operatör bağlantıları tamamlanınca aktif olacak.</p><button type="button" onclick="paymentSoon()">Şarj Başlat — Yakında</button></div>';
+    var avail='<div style="margin-top:12px">'+availBadge(s)+'</div>';
+    box.innerHTML=box.innerHTML.replace('<div style="margin-top:16px"><h3>Fırsatlar</h3>',avail+notice+'<div style="margin-top:16px"><h3>Fırsatlar</h3>');
+  };
+
+  window.paymentSoon=paymentSoon;
+
+  window.availabilityFilter='all';
+  function applyAvailabilityFilters(){
+    var q=($('searchInput')?.value||'').trim().toLowerCase();
+    var base=stations.filter(function(s){
+      var brandOk=currentBrand==='Tümü'||s.brand===currentBrand;
+      var textOk=!q||String(s.name+' '+s.brand+' '+s.address+' '+s.sockets+' '+s.power).toLowerCase().includes(q);
+      var av=availabilityFilter==='all'||(availabilityFilter==='ok'&&s.availabilityKey==='ok')||(availabilityFilter==='busy'&&s.availabilityKey==='busy')||(availabilityFilter==='unknown'&&s.availabilityKey==='unknown');
+      return brandOk&&textOk&&av;
+    });
+    base.sort(function(a,b){return sortMode==='name'?a.name.localeCompare(b.name,'tr'):(a.distance||0)-(b.distance||0)});
+    filtered=base;homeLimit=40;stationLimit=80;renderAll();
+  }
+  var oldApply=applyFilters;
+  applyFilters=applyAvailabilityFilters;
+
+  function renderAvailabilityFilters(){
+    var el=$('availabilityFilters');if(!el)return;
+    var counts={all:stations.length,ok:0,busy:0,unknown:0};
+    stations.forEach(function(s){if(s.availabilityKey==='ok')counts.ok++;else if(s.availabilityKey==='busy')counts.busy++;else counts.unknown++});
+    var items=[['all','Tümü'],['ok','Müsait'],['busy','Dolu / kısmen dolu'],['unknown','Bilinmiyor']];
+    el.innerHTML=items.map(function(x){return '<button class="availFilter '+(availabilityFilter===x[0]?'active':'')+'" onclick="setAvailabilityFilter(\''+x[0]+'\')">'+x[1]+'<span class="n">'+counts[x[0]]+'</span></button>'}).join('');
+  }
+  window.setAvailabilityFilter=function(v){availabilityFilter=v;renderAvailabilityFilters();applyFilters()};
+  var oldRenderAll=renderAll;
+  renderAll=function(){renderAvailabilityFilters();oldRenderAll()};
+
+  window.addEventListener('load',function(){setTimeout(function(){renderAvailabilityFilters();applyFilters()},1200)});
+})();
+</script>
 </body>
 </html>
