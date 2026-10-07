@@ -31,6 +31,37 @@ export default async function handler(req, res) {
   function priceValue(o,depth=0){if(!o||typeof o!=="object"||depth>6)return NaN;for(const k of PRICE_KEYS){if(Object.prototype.hasOwnProperty.call(o,k)){const n=num(o[k]);if(Number.isFinite(n)&&n>0&&n<100)return n;const p=parseMaybe(o[k]);if(p&&typeof p==="object"){const n2=priceValue(p,depth+1);if(Number.isFinite(n2))return n2;}}}for(const k of Object.keys(o)){const v=o[k];if(v&&typeof v==="object"){const n=priceValue(v,depth+1);if(Number.isFinite(n)&&n>0&&n<100)return n;}else if(typeof v==="string"&&/(tl|₺|kwh|fiyat|price|tarife|ücret|ucret)/i.test(k)){const n=num(v);if(Number.isFinite(n)&&n>0&&n<100)return n;}}return NaN}
   function power(o){return firstValue(o,["soketGucu","soketGücü","guc","güç","kw","power","gucKw","maxGuc","maxGüç"])}
   function socketType(o){return firstValue(o,["soketTipi","soketTuru","socketType","connectorType","tip","konnektorTipi"])}
+  function availabilityScan(o,depth=0,counts={ok:0,busy:0,off:0,total:0},seen={hit:false}){
+    if(!o||typeof o!=="object"||depth>7)return {counts,hit:seen.hit};
+    if(Array.isArray(o)){o.forEach(x=>availabilityScan(x,depth+1,counts,seen));return {counts,hit:seen.hit};}
+    for(const k of Object.keys(o)){
+      const v=o[k], key=String(k).toLocaleLowerCase("tr-TR");
+      const isAvail=/(müsait|musait|uygunluk|uygun|availability|available|kullanim|kullanım|usage|socket.?status|soket.?durum|durum|status|state)/i.test(key);
+      if(isAvail&&(typeof v==="boolean"||typeof v==="string"||typeof v==="number")){
+        const s=String(v).toLocaleLowerCase("tr-TR").trim();
+        let cls="";
+        if(typeof v==="boolean") cls=v?"ok":"busy";
+        else if(/ar[ıi]za|bak[ıi]m|offline|out.?of.?service|fault|hata|devre.?d[ıi]ş[ıi]/i.test(s)) cls="off";
+        else if(/dolu|occupied|in.?use|meşgul|kullan[ıi]l[ıi]yor|rezerve|reserved/i.test(s)) cls="busy";
+        else if(/müsait|musait|uygun|available|free|boş|boşta|ready|haz[ıi]r|aktif|available/i.test(s)) cls="ok";
+        else if(/^(1|true|yes|evet)$/i.test(s)) cls="ok";
+        else if(/^(0|false|no|hayır)$/i.test(s)) cls="busy";
+        if(cls){seen.hit=true;counts.total++;counts[cls]++;}
+      }
+      if(v&&typeof v==="object")availabilityScan(v,depth+1,counts,seen);
+    }
+    return {counts,hit:seen.hit};
+  }
+  function availabilitySummary(o){
+    const x=availabilityScan(o), c=x.counts;
+    if(!x.hit||!c.total)return {key:"unknown",label:"Müsaitlik bilinmiyor",counts:c};
+    if(c.ok===c.total)return {key:"ok",label:"Müsait",counts:c};
+    if(c.ok>0)return {key:"ok",label:`${c.ok}/${c.total} müsait`,counts:c};
+    if(c.busy===c.total)return {key:"busy",label:"Dolu",counts:c};
+    if(c.off===c.total)return {key:"off",label:"Arızalı / bakım",counts:c};
+    if(c.busy>0)return {key:"busy",label:"Kısmen dolu",counts:c};
+    return {key:"unknown",label:"Müsaitlik bilinmiyor",counts:c};
+  }
   function addPriceToPower(p,price){const base=String(p??"").trim();if(!Number.isFinite(price))return base;const priceText=`${price.toFixed(2)} TL/kWh`;if(base&&/TL\s*\/\s*kWh/i.test(base))return base;return base?`${base} · ${priceText}`:priceText}
   function enrichRow(raw,cols){
     const r=rowObject(raw,cols);
@@ -39,6 +70,10 @@ export default async function handler(req, res) {
     if(brandText){r.marka=brandText;r.markaAdi=brandText;r.sarjAgiMarka=brandText;r.operator=brandText;r.operatorName=brandText;}
     const stationName=firstValue(r,["sarjIstasyonuAdi","istasyonAdi","istasyonAd","ad","name","stationName"]);
     if(brandText&&stationName&&!String(stationName).toLowerCase().startsWith(brandText.toLowerCase()))r.sarjIstasyonuAdi=`${brandText} · ${stationName}`;
+    const availability=availabilitySummary(r);
+    r.molavoltAvailability=availability;
+    r.availabilityKey=availability.key;
+    r.availabilityLabel=availability.label;
     const stationPrice=priceValue(r);
     if(Number.isFinite(stationPrice)){r.fiyat=stationPrice;r.fiyatTl=stationPrice;r.birimFiyat=stationPrice;r.birimFiyatTl=stationPrice;r.sarjHizmetiBirimFiyati=stationPrice;r.sarjHizmetiBirimFiyat=stationPrice;}
     const socketKey=["soketler","sockets","socketler","sarjSoketleri","sarjIstasyonuSoketleri","sarjUniteleri","soketBilgileri","soketBilgisi"].find(k=>r[k]!==undefined&&r[k]!==null);
