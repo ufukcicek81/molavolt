@@ -5220,8 +5220,8 @@ window.toggleHomeMapNearby=function(){homeNearbyOnly=!homeNearbyOnly;renderHomeS
       if(Number.isFinite(lat)&&Number.isFinite(lon))map.set(lat.toFixed(5)+'|'+lon.toFixed(5),availabilityFromRaw(r));
     });
     return list.map(function(s){
-      var a=map.get(Number(s.lat).toFixed(5)+'|'+Number(s.lon).toFixed(5));
-      return Object.assign({},s,a||{key:'unknown',label:'Müsaitlik bilinmiyor',counts:{ok:0,busy:0,off:0,total:0}});
+      var a=map.get(Number(s.lat).toFixed(5)+'|'+Number(s.lon).toFixed(5))||{key:'unknown',label:'Müsaitlik bilinmiyor',counts:{ok:0,busy:0,off:0,total:0}};
+      return Object.assign({},s,a,{availabilityKey:a.key||'unknown',availabilityLabel:a.label||'Müsaitlik bilinmiyor'});
     });
   };
 
