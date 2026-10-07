@@ -745,7 +745,7 @@ html.mv-admin-start .adminOnly{
 .homeMapLegend{position:absolute;left:10px;right:10px;bottom:10px;z-index:500;display:flex;justify-content:space-between;align-items:center;pointer-events:none}
 .homeMapLegend span{font-size:11px;font-weight:800;color:#eaf5ff;background:rgba(5,14,25,.84);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(10px);padding:7px 9px;border-radius:10px}
 .mapLegendDot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 0 3px rgba(53,239,141,.14);margin-right:5px}
-.mvMapMarker{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:rgba(7,17,29,.94);border:2px solid var(--green);box-shadow:0 4px 14px rgba(0,0,0,.42),0 0 0 3px rgba(53,239,141,.12);color:var(--green);font-size:13px;font-weight:900}
+.mvMapMarker{display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:rgba(7,17,29,.94);border:2px solid var(--green);box-shadow:0 4px 14px rgba(0,0,0,.42),0 0 0 3px rgba(53,239,141,.12);color:var(--green);font-size:13px;font-weight:900}
 .mvMapMarker.dc{border-color:var(--blue);color:var(--blue);box-shadow:0 4px 14px rgba(0,0,0,.42),0 0 0 3px rgba(57,170,255,.12)}
 .mvMapMarker.fast{border-color:#ffe081;color:#ffe081}
 .homeMapWrap .leaflet-control-zoom{border:0!important;box-shadow:0 6px 18px rgba(0,0,0,.3)!important}
@@ -795,7 +795,7 @@ html.mv-admin-start .adminOnly{
       <section class="section sponsorHomeSection"><h3>Şarj molası fırsatları</h3><p class="muted">Kodu al, kasada göster, indirim kazan</p><div class="sponsorWrap"><div class="sponsorScroll" id="sponsorCards"></div></div><div class="sponsorDots" id="sponsorDots"></div></section>
       <section class="section homeMapSection">
         <div class="homeMapHead"><div><h3 style="margin:0">Yakındaki istasyonlar</h3><p class="muted" style="margin:4px 0 0">İstasyonları haritada hızlıca keşfet</p></div><button class="mapExpandBtn" type="button" onclick="showTab('stations')">Tümünü gör</button></div>
-        <div class="homeMapWrap"><div id="homeStationMap"></div><div class="homeMapLegend"><span><i class="mapLegendDot"></i> Şarj istasyonu</span><span id="homeMapCount">0 istasyon</span></div></div>
+        <div class="homeMapWrap"><div id="homeStationMap"></div><div class="homeMapLegend"><span><i class="mapLegendDot"></i> Yakındaki istasyonlar</span><span id="homeMapCount">0 yakın istasyon</span></div></div>
       </section>
       <section class="section"><h3>Yakındaki istasyonlar</h3><p class="muted" id="countText">Yakındaki istasyonlar</p><p class="muted" id="locStatus" style="font-size:13px;margin-top:4px">Yakındaki istasyonlar konumuna göre sıralanır.</p><div class="sorts"><button id="sortDistance" class="sort active" onclick="setSort('distance')">En yakın</button><button id="sortName" class="sort" onclick="setSort('name')">A-Z</button></div><div class="cards" id="homeCards"></div></section>
     </div>
@@ -4994,9 +4994,9 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
       if(!res.ok)throw new Error('EPDK HTTP '+res.status);
       var data=await res.json(), list=normalizeEpdkData(data);
       if(!Array.isArray(list)||!list.length)throw new Error('EPDK istasyon listesi boş');
-      setEpdkStations(list);buildStations();applyFilters();renderChips();
+      setEpdkStations(list);buildStations();applyFilters();renderChips();setTimeout(renderHomeStationMap,150);
       console.log('MolaVolt canlı EPDK yenilendi:',list.length);
-    }catch(e){console.warn('MolaVolt canlı EPDK yenileme başarısız:',e);buildStations();applyFilters();renderChips();}
+    }catch(e){console.warn('MolaVolt canlı EPDK yenileme başarısız:',e);buildStations();applyFilters();renderChips();setTimeout(renderHomeStationMap,150)}
   }
   window.addEventListener('load',function(){setTimeout(refreshLiveStationData,1000);});
 })();
@@ -5010,7 +5010,7 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
   function markerClass(s){var p=String(s.power||'');var n=Number((p.match(/\\d+(?:[.,]\\d+)?/)||['0'])[0].replace(',','.'));return n>=100?'fast':(n>=50?'dc':'')}
   function renderHomeStationMap(){
     var el=document.getElementById('homeStationMap'); if(!el||typeof L==='undefined')return;
-    var list=Array.isArray(stations)?stations.filter(function(s){return Number.isFinite(Number(s.lat))&&Number.isFinite(Number(s.lon));}).slice(0,100):[];
+    var list=Array.isArray(stations)?stations.filter(function(s){return Number.isFinite(Number(s.lat))&&Number.isFinite(Number(s.lon));}).sort(function(a,b){return (Number(a.distance)||999999)-(Number(b.distance)||999999);}).slice(0,25):[];
     if(!homeMap){
       homeMap=L.map(el,{zoomControl:true,attributionControl:true,scrollWheelZoom:false,dragging:true,doubleClickZoom:true,touchZoom:true}).setView([39.0,35.0],6);
       L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{subdomains:'abcd',maxZoom:19,attribution:'&copy; OpenStreetMap &copy; CARTO'}).addTo(homeMap);
@@ -5020,7 +5020,7 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
     var bounds=[];
     list.forEach(function(s){
       var lat=Number(s.lat),lon=Number(s.lon); bounds.push([lat,lon]);
-      var icon=L.divIcon({className:'',html:'<div class="mvMapMarker '+markerClass(s)+'">⚡</div>',iconSize:[28,28],iconAnchor:[14,14],popupAnchor:[0,-12]});
+      var icon=L.divIcon({className:'',html:'<div class="mvMapMarker '+markerClass(s)+'">⚡</div>',iconSize:[24,24],iconAnchor:[12,12],popupAnchor:[0,-12]});
       var m=L.marker([lat,lon],{icon:icon}).addTo(homeMap);
       var price=Number.isFinite(Number(s.price))?Number(s.price).toFixed(2)+' TL/kWh':'';
       m.bindPopup('<div class="homeMapPopup"><strong>'+escMap(s.name)+'</strong><div class="mpBrand">'+escMap(s.operator||s.brand||'Şarj istasyonu')+'</div><div class="mpMeta">'+escMap(s.power||'')+(price?' · '+price:'')+'</div></div>');
@@ -5030,10 +5030,10 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
     var up=Number(userPos&&userPos.lat), ul=Number(userPos&&userPos.lon);
     if(Number.isFinite(up)&&Number.isFinite(ul)){L.circleMarker([up,ul],{radius:7,color:'#39aaff',weight:3,fillColor:'#39aaff',fillOpacity:.85}).addTo(homeMap).bindPopup('Konumun');bounds.push([up,ul]);}
     if(bounds.length){
-      if(Number.isFinite(up)&&Number.isFinite(ul))homeMap.setView([up,ul],Math.max(9,Math.min(13,homeMap.getZoom())),{animate:false});
+      if(Number.isFinite(up)&&Number.isFinite(ul))homeMap.setView([up,ul],Math.max(10,Math.min(13,homeMap.getZoom())),{animate:false});
       else homeMap.fitBounds(bounds,{padding:[22,22],maxZoom:12});
     }
-    var count=document.getElementById('homeMapCount');if(count)count.textContent=list.length+' istasyon';
+    var count=document.getElementById('homeMapCount');if(count)count.textContent=list.length+' yakın istasyon';
     setTimeout(function(){homeMap.invalidateSize()},100);
   }
   window.renderHomeStationMap=renderHomeStationMap;
