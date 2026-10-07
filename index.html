@@ -33,6 +33,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>MolaVolt</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
 <style>
 :root{--bg:#07111d;--card:#0d1b2c;--line:rgba(255,255,255,.12);--text:#edf5ff;--muted:#91a8bf;--green:#35ef8d;--blue:#39aaff;--yellow:#ffe081;--shadow:0 18px 45px rgba(0,0,0,.30)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{margin:0;min-height:100%;font-family:Arial,Helvetica,sans-serif;background:radial-gradient(circle at top left,rgba(54,239,141,.13),transparent 25%),radial-gradient(circle at top right,rgba(57,170,255,.13),transparent 25%),linear-gradient(180deg,#07111d,#081420);color:var(--text);overflow-x:hidden}
@@ -760,6 +762,15 @@ html.mv-admin-start .adminOnly{
 /* UFUK_MAP_LAYER_SWITCH_1007 */
 .homeMapLayerBtn{position:absolute;top:10px;right:10px;z-index:600;border:1px solid rgba(255,255,255,.18);background:rgba(7,17,29,.9);color:#fff;border-radius:11px;padding:8px 11px;font-size:11px;font-weight:800;box-shadow:0 6px 18px rgba(0,0,0,.25)}
 .homeMapLayerBtn.active{color:var(--green);border-color:rgba(53,239,141,.45)}
+/* UFUK_TURKEY_MAP_PRICE_CLUSTER_1007 */
+.homeMapModeBtns{position:absolute;top:10px;right:10px;z-index:650;display:flex;gap:6px}
+.homeMapModeBtns button{border:1px solid rgba(255,255,255,.18);background:rgba(7,17,29,.92);color:#edf5ff;border-radius:10px;padding:8px 10px;font-size:11px;font-weight:800;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+.homeMapModeBtns button.active{color:var(--green);border-color:rgba(53,239,141,.5)}
+.mvMapMarker{width:auto!important;height:28px!important;min-width:28px;padding:0 6px!important;gap:4px;border-radius:16px!important}
+.mvMapMarker .mvBolt{font-size:12px}.mvMapMarker .mvPrice{font-size:10px;white-space:nowrap;font-weight:900}
+.homeMapWrap .marker-cluster-small,.homeMapWrap .marker-cluster-medium,.homeMapWrap .marker-cluster-large{background:rgba(53,239,141,.18)!important}
+.homeMapWrap .marker-cluster-small div,.homeMapWrap .marker-cluster-medium div,.homeMapWrap .marker-cluster-large div{background:rgba(7,17,29,.94)!important;color:#35ef8d!important;border:2px solid #35ef8d;font-weight:900}
+.homeMapWrap .leaflet-tooltip.mvPriceTip{background:rgba(7,17,29,.94);border:1px solid rgba(53,239,141,.35);color:#35ef8d;font-weight:900;border-radius:9px;box-shadow:0 4px 14px rgba(0,0,0,.3)}
 </style>
 <script>
 /* UFUK_REFRESH_NO_FLASH_ROUTE_FAST_0633: yenilemede yanlış/admin ekranı parlamasını engeller */
@@ -798,7 +809,7 @@ html.mv-admin-start .adminOnly{
       <section class="section sponsorHomeSection"><h3>Şarj molası fırsatları</h3><p class="muted">Kodu al, kasada göster, indirim kazan</p><div class="sponsorWrap"><div class="sponsorScroll" id="sponsorCards"></div></div><div class="sponsorDots" id="sponsorDots"></div></section>
       <section class="section homeMapSection">
         <div class="homeMapHead"><div><h3 style="margin:0">Yakındaki istasyonlar</h3><p class="muted" style="margin:4px 0 0">İstasyonları haritada hızlıca keşfet</p></div><button class="mapExpandBtn" type="button" onclick="showTab('stations')">Tümünü gör</button></div>
-        <div class="homeMapWrap"><button id="homeMapLayerBtn" class="homeMapLayerBtn" type="button" onclick="toggleHomeMapLayer()">Uydu</button><div id="homeStationMap"></div><div class="homeMapLegend"><span><i class="mapLegendDot"></i> Yakındaki istasyonlar</span><span id="homeMapCount">0 yakın istasyon</span></div></div>
+        <div class="homeMapWrap"><div class="homeMapModeBtns"><button id="homeMapNearbyBtn" type="button" onclick="toggleHomeMapNearby()">Yakınım 100</button><button id="homeMapLayerBtn" type="button" onclick="toggleHomeMapLayer()">Uydu</button></div><div id="homeStationMap"></div><div class="homeMapLegend"><span><i class="mapLegendDot"></i> Yakındaki istasyonlar</span><span id="homeMapCount">0 yakın istasyon</span></div></div>
       </section>
       <section class="section"><h3>Yakındaki istasyonlar</h3><p class="muted" id="countText">Yakındaki istasyonlar</p><p class="muted" id="locStatus" style="font-size:13px;margin-top:4px">Yakındaki istasyonlar konumuna göre sıralanır.</p><div class="sorts"><button id="sortDistance" class="sort active" onclick="setSort('distance')">En yakın</button><button id="sortName" class="sort" onclick="setSort('name')">A-Z</button></div><div class="cards" id="homeCards"></div></section>
     </div>
@@ -4997,63 +5008,96 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
       if(!res.ok)throw new Error('EPDK HTTP '+res.status);
       var data=await res.json(), list=normalizeEpdkData(data);
       if(!Array.isArray(list)||!list.length)throw new Error('EPDK istasyon listesi boş');
-      setEpdkStations(list);buildStations();applyFilters();renderChips();setTimeout(renderHomeStationMap,150);
+      setEpdkStations(list);buildStations();applyFilters();renderChips();if(window.renderHomeStationMap)setTimeout(window.renderHomeStationMap,150);
       console.log('MolaVolt canlı EPDK yenilendi:',list.length);
-    }catch(e){console.warn('MolaVolt canlı EPDK yenileme başarısız:',e);buildStations();applyFilters();renderChips();setTimeout(renderHomeStationMap,150)}
+    }catch(e){console.warn('MolaVolt canlı EPDK yenileme başarısız:',e);buildStations();applyFilters();renderChips();if(window.renderHomeStationMap)setTimeout(window.renderHomeStationMap,150)}
   }
   window.addEventListener('load',function(){setTimeout(refreshLiveStationData,1000);});
 })();
 
 </script>
 <script>
-/* UFUK_HOME_MINI_MAP_1007 */
+/* UFUK_HOME_MINI_MAP_1007 + TURKEY_ALL + NEAREST100 + PRICE */
 (function(){
-  var homeMap=null, homeMarkers=[], homeBaseLayer=null, homeSatelliteLayer=null, homeSatellite=false;
+  var homeMap=null, homeMarkers=[], homeCluster=null, homeUserLayer=null, homeBaseLayer=null, homeSatelliteLayer=null;
+  var homeSatellite=false, homeNearbyOnly=false;
+
   function escMap(v){return typeof esc==='function'?esc(String(v??'')):String(v??'').replace(/[&<>"']/g,function(m){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m]})}
-  function markerClass(s){var p=String(s.power||'');var n=Number((p.match(/\\d+(?:[.,]\\d+)?/)||['0'])[0].replace(',','.'));return n>=100?'fast':(n>=50?'dc':'')}
+  function priceText(s){
+    var p=Number(s&&s.price);
+    if(Number.isFinite(p)&&p>0)return (s.priceFallback?'≈ ':'')+p.toFixed(2);
+    var op=String((s&&s.operator)|| (s&&s.brand)||'').toLocaleLowerCase('tr-TR');
+    var dc=Number(String(s&&s.power||'').match(/\d+(?:[.,]\d+)?/)?.[0]?.replace(',','.')||0)>=50;
+    var m=[['trugo',9.95,14.98],['zes',10.99,16.49],['zorlu',10.99,16.49],['eşarj',9.90,13.50],['esarj',9.90,13.50],['astor',9.89,13.99],['sharz',9.49,12.49],['voltrun',9.90,12.90],['wat',10.99,14.49],['otopriz',9.90,13.90],['oncharge',9.99,13.50],['aksa',8.99,12.49],['360',8.99,11.49],['e-power',8.49,10.99],['epower',8.49,10.99],['myzco',9.90,11.90],['q charge',9.95,14.98],['ctg',9.49,12.49],['sepaş',8.99,10.99],['sepas',8.99,10.99]];
+    for(var i=0;i<m.length;i++)if(op.indexOf(m[i][0])>-1)return '≈ '+(dc?m[i][2]:m[i][1]).toFixed(2);
+    return '—';
+  }
+  function markerClass(s){
+    var p=String(s&&s.power||'');var n=Number((p.match(/\d+(?:[.,]\d+)?/)||['0'])[0].replace(',','.'));
+    return n>=100?'fast':(n>=50?'dc':'');
+  }
+  function makeIcon(s){
+    var p=priceText(s);
+    return L.divIcon({className:'',html:'<div class="mvMapMarker '+markerClass(s)+'"><span class="mvBolt">⚡</span><span class="mvPrice">'+escMap(p)+'</span></div>',iconSize:[0,28],iconAnchor:[14,14],popupAnchor:[0,-12]});
+  }
+  function getList(){
+    var all=Array.isArray(stations)?stations.filter(function(s){return Number.isFinite(Number(s.lat))&&Number.isFinite(Number(s.lon));}):[];
+    if(!homeNearbyOnly)return all;
+    return all.slice().sort(function(a,b){return (Number(a.distance)||999999)-(Number(b.distance)||999999)}).slice(0,100);
+  }
   function renderHomeStationMap(){
     var el=document.getElementById('homeStationMap'); if(!el||typeof L==='undefined')return;
-    var list=Array.isArray(stations)?stations.filter(function(s){return Number.isFinite(Number(s.lat))&&Number.isFinite(Number(s.lon));}).sort(function(a,b){return (Number(a.distance)||999999)-(Number(b.distance)||999999);}).slice(0,25):[];
+    var list=getList();
     if(!homeMap){
       homeMap=L.map(el,{zoomControl:true,attributionControl:true,scrollWheelZoom:false,dragging:true,doubleClickZoom:true,touchZoom:true}).setView([39.0,35.0],6);
-      homeBaseLayer=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{subdomains:'abc',maxZoom:19,crossOrigin:true,attribution:'&copy; OpenStreetMap katkıda bulunanları'});
+      homeBaseLayer=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{subdomains:'abc',maxZoom:19,crossOrigin:true,attribution:'&copy; OpenStreetMap katkıda bulunanları'}).addTo(homeMap);
       homeSatelliteLayer=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles &copy; Esri'});
-      homeBaseLayer.addTo(homeMap);
     }
-    homeMarkers.forEach(function(m){try{homeMap.removeLayer(m)}catch(e){}});
+    if(homeCluster){homeMap.removeLayer(homeCluster);homeCluster=null}
     homeMarkers=[];
+    if(typeof L.markerClusterGroup==='function'){
+      homeCluster=L.markerClusterGroup({showCoverageOnHover:false,zoomToBoundsOnClick:true,spiderfyOnMaxZoom:true,removeOutsideVisibleBounds:true,maxClusterRadius:48,disableClusteringAtZoom:9});
+    }
     var bounds=[];
     list.forEach(function(s){
       var lat=Number(s.lat),lon=Number(s.lon); bounds.push([lat,lon]);
-      var icon=L.divIcon({className:'',html:'<div class="mvMapMarker '+markerClass(s)+'">⚡</div>',iconSize:[24,24],iconAnchor:[12,12],popupAnchor:[0,-12]});
-      var m=L.marker([lat,lon],{icon:icon}).addTo(homeMap);
-      var price=Number.isFinite(Number(s.price))?Number(s.price).toFixed(2)+' TL/kWh':'';
-      m.bindPopup('<div class="homeMapPopup"><strong>'+escMap(s.name)+'</strong><div class="mpBrand">'+escMap(s.operator||s.brand||'Şarj istasyonu')+'</div><div class="mpMeta">'+escMap(s.power||'')+(price?' · '+price:'')+'</div></div>');
-      m.on('click',function(){ if(typeof openDetail==='function')openDetail(s.id); });
+      var m=L.marker([lat,lon],{icon:makeIcon(s)});
+      var p=priceText(s);
+      m.bindPopup('<div class="homeMapPopup"><strong>'+escMap(s.name)+'</strong><div class="mpBrand">'+escMap(s.operator||s.brand||'Şarj istasyonu')+'</div><div class="mpMeta">'+escMap(s.power||'')+(p&&p!=='—'?' · '+escMap(p)+' TL/kWh':' · Fiyat yok')+'</div></div>');
+      m.on('click',function(){if(typeof openDetail==='function')openDetail(s.id)});
+      if(homeCluster)homeCluster.addLayer(m); else m.addTo(homeMap);
       homeMarkers.push(m);
     });
-    var up=Number(userPos&&userPos.lat), ul=Number(userPos&&userPos.lon);
-    if(Number.isFinite(up)&&Number.isFinite(ul)){L.circleMarker([up,ul],{radius:7,color:'#39aaff',weight:3,fillColor:'#39aaff',fillOpacity:.85}).addTo(homeMap).bindPopup('Konumun');bounds.push([up,ul]);}
-    if(bounds.length){
-      if(Number.isFinite(up)&&Number.isFinite(ul))homeMap.setView([up,ul],Math.max(10,Math.min(13,homeMap.getZoom())),{animate:false});
-      else homeMap.fitBounds(bounds,{padding:[22,22],maxZoom:12});
+    if(homeCluster)homeCluster.addTo(homeMap);
+    if(homeUserLayer){homeMap.removeLayer(homeUserLayer);homeUserLayer=null}
+    var up=Number(userPos&&userPos.lat),ul=Number(userPos&&userPos.lon);
+    if(homeNearbyOnly&&Number.isFinite(up)&&Number.isFinite(ul)){
+      homeUserLayer=L.circleMarker([up,ul],{radius:7,color:'#39aaff',weight:3,fillColor:'#39aaff',fillOpacity:.85}).addTo(homeMap).bindPopup('Konumun');
+      bounds.push([up,ul]);
+      homeMap.setView([up,ul],12,{animate:false});
+    }else if(!homeNearbyOnly){
+      homeMap.setView([39.0,35.0],6,{animate:false});
     }
-    var count=document.getElementById('homeMapCount');if(count)count.textContent=list.length+' yakın istasyon';
-    setTimeout(function(){homeMap.invalidateSize()},100);
+    var count=document.getElementById('homeMapCount');
+    if(count)count.textContent=homeNearbyOnly?list.length+' en yakın istasyon':list.length+' Türkiye geneli istasyon';
+    var b=document.getElementById('homeMapNearbyBtn');
+    if(b){b.textContent=homeNearbyOnly?'Türkiye geneli':'Yakınım 100';b.classList.toggle('active',homeNearbyOnly)}
+    setTimeout(function(){homeMap.invalidateSize()},120);
   }
+  window.toggleHomeMapNearby=function(){homeNearbyOnly=!homeNearbyOnly;renderHomeStationMap()};
   window.toggleHomeMapLayer=function(){
-  if(!homeMap||!homeBaseLayer||!homeSatelliteLayer)return;
-  if(homeSatellite){homeMap.removeLayer(homeSatelliteLayer);homeBaseLayer.addTo(homeMap);}
-  else{homeMap.removeLayer(homeBaseLayer);homeSatelliteLayer.addTo(homeMap);}
-  homeSatellite=!homeSatellite;
-  var b=document.getElementById('homeMapLayerBtn');
-  if(b){b.textContent=homeSatellite?'Harita':'Uydu';b.classList.toggle('active',homeSatellite);}
-  setTimeout(function(){homeMap.invalidateSize()},80);
-};
-window.renderHomeStationMap=renderHomeStationMap;
-  window.addEventListener('load',function(){setTimeout(renderHomeStationMap,700)});
-  document.addEventListener('DOMContentLoaded',function(){setTimeout(renderHomeStationMap,1200)});
-})();
-</script>
+    if(!homeMap||!homeBaseLayer||!homeSatelliteLayer)return;
+    if(homeSatellite){homeMap.removeLayer(homeSatelliteLayer);homeBaseLayer.addTo(homeMap)}
+    else{homeMap.removeLayer(homeBaseLayer);homeSatelliteLayer.addTo(homeMap)}
+    homeSatellite=!homeSatellite;
+    var b=document.getElementById('homeMapLayerBtn');
+    if(b){b.textContent=homeSatellite?'Harita':'Uydu';b.classList.toggle('active',homeSatellite)}
+    setTimeout(function(){homeMap.invalidateSize()},80);
+  };
+  window.renderHomeStationMap=renderHomeStationMap;
+  window.addEventListener('load',function(){setTimeout(renderHomeStationMap,900)});
+  document.addEventListener('DOMContentLoaded',function(){setTimeout(renderHomeStationMap,1400)});
+})();</script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 </body>
 </html>
