@@ -53,11 +53,36 @@ export default async function handler(req, res) {
     }
     return {counts,hit:seen.hit};
   }
+  function availabilityCounts(o,depth=0,out={free:NaN,total:NaN,busy:NaN,off:NaN}){
+    o=parseMaybe(o); if(!o||typeof o!=="object"||depth>8)return out;
+    if(Array.isArray(o)){o.forEach(x=>availabilityCounts(x,depth+1,out));return out;}
+    for(const k of Object.keys(o)){
+      const v=parseMaybe(o[k]); const key=String(k).toLocaleLowerCase("tr-TR").replace(/[ıİ]/g,"i");
+      const n=num(v);
+      if(Number.isFinite(n)){
+        if(/(kullanilabilir|kullanabilir|musait|uygun).*?(soket|socket|unit|connector|port)/i.test(key)||/(soket|socket|unit|connector|port).*?(kullanilabilir|kullanabilir|musait|uygun)/i.test(key)) out.free=n;
+        if(/(toplam|total|adet|sayi|sayisi).*?(soket|socket|unit|connector|port)/i.test(key)||/(soket|socket|unit|connector|port).*?(toplam|total|adet|sayi|sayisi)/i.test(key)) out.total=n;
+        if(/(dolu|mesgul|occupied|busy).*?(soket|socket|unit|connector|port)/i.test(key)) out.busy=n;
+        if(/(ariza|bakim|fault|offline).*?(soket|socket|unit|connector|port)/i.test(key)) out.off=n;
+      }
+      if(v&&typeof v==="object")availabilityCounts(v,depth+1,out);
+    }
+    return out;
+  }
   function availabilitySummary(o){
     const x=availabilityScan(o), c=x.counts;
+    const n=availabilityCounts(o);
+    if(Number.isFinite(n.total)&&n.total>0){
+      const free=Number.isFinite(n.free)?Math.max(0,Math.min(n.total,n.free)):NaN;
+      const busy=Number.isFinite(n.busy)?Math.max(0,Math.min(n.total,n.busy)):NaN;
+      const off=Number.isFinite(n.off)?Math.max(0,Math.min(n.total,n.off)):NaN;
+      if(Number.isFinite(free)){ if(free>=n.total)return {key:"ok",label:"Müsait",counts:{...c,ok:free,total:n.total}}; if(free>0)return {key:"ok",label:String(free)+"/"+String(n.total)+" müsait",counts:{...c,ok:free,busy:Number.isFinite(busy)?busy:Math.max(0,n.total-free),total:n.total}}; }
+      if(Number.isFinite(busy)&&busy>=n.total)return {key:"busy",label:"Dolu",counts:{...c,busy:busy,total:n.total}};
+      if(Number.isFinite(off)&&off>=n.total)return {key:"off",label:"Arızalı / bakım",counts:{...c,off:off,total:n.total}};
+    }
     if(!x.hit||!c.total)return {key:"unknown",label:"Müsaitlik bilinmiyor",counts:c};
     if(c.ok===c.total)return {key:"ok",label:"Müsait",counts:c};
-    if(c.ok>0)return {key:"ok",label:`${c.ok}/${c.total} müsait`,counts:c};
+    if(c.ok>0)return {key:"ok",label:String(c.ok)+"/"+String(c.total)+" müsait",counts:c};
     if(c.busy===c.total)return {key:"busy",label:"Dolu",counts:c};
     if(c.off===c.total)return {key:"off",label:"Arızalı / bakım",counts:c};
     if(c.busy>0)return {key:"busy",label:"Kısmen dolu",counts:c};
