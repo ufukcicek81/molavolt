@@ -1435,7 +1435,39 @@ function openDetail(id){
   $('detailContent').innerHTML=`<h2>${esc(s.name)}</h2><p class="muted">${esc(s.address)}</p><div class="tags"><span class="tag g">${esc(s.brand)}</span><span class="tag b">${Number(s.distance||0).toFixed(1)} km</span><span class="tag">${esc(s.sockets)}</span><span class="tag y">${esc(s.power)}</span></div><br><div class="cardActions"><button class="mapShowBtn" onclick="openStationMap('${esc(s.id)}',event)">Haritada gör</button><a class="routeBtn" href="${routeUrl(s)}" target="_blank" rel="noopener">Yol tarifi al</a></div><div style="margin-top:16px"><h3>Fırsatlar</h3>${offerHtml}</div>`;
   openModal('detailModal');
 }
-function openStationMap(id,event){if(event){event.preventDefault();event.stopPropagation()}const s=stations.find(x=>x.id===id);if(!s)return;$('mapModalTitle').textContent=s.name;$('mapModalText').textContent=`${s.brand} · ${s.address} · ${s.power}`;$('mapModalRoute').href=routeUrl(s);openModal('mapModal');setTimeout(()=>{if(!stationMap){stationMap=L.map('stationMap',{zoomControl:true,tap:true,dragging:true,touchZoom:true,doubleClickZoom:true,scrollWheelZoom:true}).setView([s.lat,s.lon],15);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OSM'}).addTo(stationMap)}else{stationMap.setView([s.lat,s.lon],15)}if(stationMapMarker)stationMap.removeLayer(stationMapMarker);stationMapMarker=L.marker([s.lat,s.lon]).addTo(stationMap).bindPopup(`<b>${esc(s.name)}</b><br>${esc(s.address)}`).openPopup();setTimeout(()=>stationMap.invalidateSize(),180)},180)}function closeStationMap(){closeModal('mapModal')}function hardRefresh(){location.href=location.pathname+'?v='+Date.now()}
+/* MV_GOOGLE_STATION_MODAL_1008 */
+function openStationMap(id,event){
+ if(event){event.preventDefault();event.stopPropagation();}
+ const s=stations.find(x=>x.id===id);if(!s)return;
+ $('mapModalTitle').textContent=s.name;
+ $('mapModalText').textContent=(s.brand||'')+' · '+(s.address||'')+' · '+(s.power||'');
+ $('mapModalRoute').href=routeUrl(s);
+ openModal('mapModal');
+ setTimeout(async function(){
+   const holder=$('stationMap');
+   try{
+     if(!window.mvEnsureGoogleMaps)throw new Error('Google Haritalar henüz hazır değil');
+     await window.mvEnsureGoogleMaps();
+     if(!stationMap){
+       holder.replaceChildren();
+       stationMap=new google.maps.Map(holder,{
+         center:{lat:Number(s.lat),lng:Number(s.lon)},zoom:15,
+         mapTypeId:'roadmap',mapTypeControl:true,streetViewControl:false,fullscreenControl:false
+       });
+     }else{stationMap.setCenter({lat:Number(s.lat),lng:Number(s.lon)});stationMap.setZoom(15);}
+     if(stationMapMarker)stationMapMarker.setMap(null);
+     stationMapMarker=new google.maps.Marker({map:stationMap,position:{lat:Number(s.lat),lng:Number(s.lon)},title:s.name||'Şarj istasyonu'});
+     const info=new google.maps.InfoWindow({content:'<b>'+esc(s.name)+'</b><br>'+esc(s.address||'')});
+     info.open({map:stationMap,anchor:stationMapMarker});
+     setTimeout(function(){google.maps.event.trigger(stationMap,'resize');stationMap.setCenter({lat:Number(s.lat),lng:Number(s.lon)});},140);
+   }catch(err){
+     console.warn('MolaVolt istasyon Google haritası:',err);
+     holder.textContent='Google Haritalar şu anda yüklenemedi. Yol tarifi bağlantısını kullanabilirsin.';
+   }
+ },160);
+}
+function closeStationMap(){closeModal('mapModal');}
+function hardRefresh(){location.href=location.pathname+'?v='+Date.now()}
 async function loadEpdk(){const url=($('epdkUrl').value||DEFAULT_EPDK_URL).trim();localStorage.setItem('molavolt_epdk_url',url);$('adminStatus').textContent='EPDK verisi çekiliyor...';try{const res=await fetch(url,{cache:'no-store'});const txt=await res.text();let data=parseMaybe(txt);if(typeof data==='string')throw new Error('API JSON döndürmedi: '+txt.slice(0,120));if(!res.ok)throw new Error('HTTP '+res.status+' - '+txt.slice(0,220));const list=normalizeEpdkData(data);if(!list.length)throw new Error('EPDK cevap verdi ama koordinatlı istasyon bulunamadı. numRows: '+(data.numRows??'bilinmiyor')+' / result tipi: '+(typeof data.result));clearLegacySilent();setEpdkStations(list);buildStations();applyFilters();renderAdmin();$('adminStatus').textContent=`EPDK yüklendi: ${list.length} istasyon`;alert('EPDK verisi yüklendi: '+list.length+' istasyon')}catch(err){$('adminStatus').textContent='Hata: '+err.message;alert('EPDK yükleme hatası: '+err.message)}}
 function clearEpdk(){if(!confirm('EPDK verisi temizlensin mi?'))return;localStorage.removeItem('molavolt_epdk_stations');buildStations();applyFilters();renderAdmin();$('adminStatus').textContent='EPDK verisi temizlendi.'}
 
@@ -5131,7 +5163,7 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
       var timeout=setTimeout(function(){fail('Google Maps bağlantısı zaman aşımına uğradı');},16000);
       function finish(){if(settled)return;settled=true;clearTimeout(timeout);resolve();}
       function fail(msg){if(settled)return;settled=true;clearTimeout(timeout);loading=null;reject(new Error(msg));}
-      window.mvGoogleMapsAuthFailure=function(){mapError=true;setLoading('Google Maps erişimi reddedildi. API anahtarı, yetkili alan adı ve faturalandırmayı kontrol edin.',true);};
+      window.mvGoogleMapsAuthFailure=function(){mapError=true;map=null;markers=[];cluster=null;info=null;setLoading('Google Maps erişimi reddedildi. API anahtarı, yetkili alan adı ve faturalandırmayı kontrol edin.',true);};
       window.gm_authFailure=window.mvGoogleMapsAuthFailure;
       window.mvGoogleMapsPrimaryLoaded=finish;
       var script=document.createElement('script');
@@ -5227,6 +5259,7 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
   }
   window.renderHomeStationMap=renderHomeStationMap;
   window.mvRenderGoogleMap=renderHomeStationMap;
+  window.mvEnsureGoogleMaps=loadGoogle;
   window.openHomeMapFullscreen=function(){
     var wrap=document.querySelector('.homeMapWrap');if(!wrap)return;
     wrap.classList.add('homeMapFullscreen');document.body.style.overflow='hidden';
