@@ -4716,7 +4716,7 @@ window.addEventListener('load',()=>{
       <label class="routeToggleLine"><input id="rp_elevation" type="checkbox" checked> Rakım farkını hesaba kat</label>
       <div class="routeSmartGrid">
         <div><label>Sürücü hariç yolcu</label><input id="rp_passengers" type="number" inputmode="numeric" min="0" max="7" value="0"></div>
-        <div><label>Klima kullanımı</label><select id="rp_climate"><option value="off">Kapalı</option><option value="eco">Hafif</option><option value="normal" selected>Normal</option><option value="high">Yoğun</option></select></div>
+        <div><label>Klima kullanımı</label><select id="rp_climate"><option value="off" selected>Tüketime dahil</option><option value="eco">Hafif (+0,7)</option><option value="normal">Normal (+1,4)</option><option value="high">Yoğun (+2,4)</option></select></div>
       </div>
       <label class="routeToggleLine"><input id="rp_force80" type="checkbox"> Her molada %80’e kadar şarj et</label>
       <p class="muted" style="font-size:12px;margin:8px 0 0">İstersen kapatabilirsin. Kapalıyken sistem yetecek kadar şarj planlar.</p>`;
@@ -4829,8 +4829,9 @@ window.addEventListener('load',()=>{
     const force80=!!opts?.force80; const forceLimitPct=80; const forceLimitEnergy=battery*forceLimitPct/100;
     for(let i=0;i<14;i++){
       const travelReserve=(i===0&&lowMode)?Math.min(0.5,Math.max(0.15,battery*0.006)):Math.max(1.0,battery*0.018);
-      const remainingToFinishKm=Math.max(0,(1-progress)*distance);
-      const finishNeedKwh=remainingToFinishKm*consumption/100+finalReserve;
+      /* MV_EV_SAFETY_1008 */ const remainingToFinishKm=Math.max(0,(1-progress)*distance);
+      const lastDetour=stops.length?Math.max(0,num(stops[stops.length-1].routeDeviation,0)):0;
+      const finishNeedKwh=(remainingToFinishKm+lastDetour)*consumption/100+finalReserve;
       if(energy>=finishNeedKwh)break;
       const reachableKm=Math.max(0,energy-travelReserve)/Math.max(consumption,1)*100; const maxProgress=progress+(reachableKm/Math.max(distance,1));
       let cand;
@@ -4851,9 +4852,13 @@ window.addEventListener('load',()=>{
       accepted.sort((a,b)=>{const sc=s=> i===0&&lowMode ? (-(s.originDriveKm||999)*8-Math.max(0,s.extraKm||0)*6-Math.max(0,s.routeDeviation||0)*2+Math.min(15,(s.routeKw||0)/8)) : (((s.routeProgress-progress)*150)-Math.max(0,s.extraKm||0)*120-Math.pow(Math.max(0,s.routeDeviation||0),1.35)*30+Math.min(18,(s.routeKw||0)/8)); return sc(b)-sc(a);});
       const stop={...accepted[0]}; usedIds.add(stop.id);
       const segKm=(i===0&&lowMode)?Math.max(0,stop.leg1Km||stop.originDriveKm||((stop.routeProgress-progress)*distance)):Math.max(0,(stop.routeProgress-progress)*distance);
-      const used=segKm*consumption/100; const arrivalEnergy=Math.max(0,energy-used);
+      const departKm=i>0?Math.max(0,num(stops[stops.length-1].routeDeviation,0)):0;
+      const approachKm=i===0&&lowMode?0:Math.max(0,num(stop.routeDeviation,0));
+      const used=(segKm+departKm+approachKm)*consumption/100;
+      if(!Number.isFinite(used)||energy-used<Math.max(0.15,travelReserve*0.4))break;
+      const arrivalEnergy=energy-used;
       const nextProgress=Math.max(stop.routeProgress||0,progress+segKm/Math.max(distance,1));
-      const remainingKm=Math.max(0,(1-nextProgress)*distance); const finalNeed=remainingKm*consumption/100+finalReserve;
+      const remainingKm=Math.max(0,(1-nextProgress)*distance); const finalNeed=(remainingKm+Math.max(0,num(stop.routeDeviation,0)))*consumption/100+finalReserve;
       let chargeTo;
       if(force80){
         /* UFUK_FORCE80_HARD_CAP_80_MULTISTOP_FIX_0631
@@ -4865,11 +4870,15 @@ window.addEventListener('load',()=>{
       else { chargeTo=Math.min(battery,Math.max(finalNeed,battery*Math.max(arrival+8,35)/100)); }
       // 0631 güvenlik kilidi: force80 açıksa hiçbir hesap %80 üstüne çıkamaz.
       if(force80) chargeTo=Math.min(chargeTo, forceLimitEnergy);
-      const chargeKwh=Math.max(0,chargeTo-arrivalEnergy); const kw=stKw(stop)||chargeKw||90; const tr=chargeTimeRange(chargeKwh,kw);
+      const chargeKwh=Math.max(0,chargeTo-arrivalEnergy); if(chargeKwh<0.05)break;
+      const kw=stKw(stop)||chargeKw||90; const tr=chargeTimeRange(chargeKwh,kw);
       stops.push({...stop,arrivalSoc:arrivalEnergy/battery*100,chargeToSoc:chargeTo/battery*100,chargeKwh,chargeMin:Math.ceil((tr.min+tr.max)/2),chargeMinLow:tr.min,chargeMinHigh:tr.max,chargeTimeText:tr.text,cost:chargeKwh*price,effectiveKw:kw,emergencyFirst:i===0&&lowMode});
       energy=chargeTo; progress=nextProgress; lowMode=false;
     }
-    return {stops,totalKwh:stops.reduce((a,s)=>a+s.chargeKwh,0),totalMin:stops.reduce((a,s)=>a+s.chargeMin,0),totalTimeText:totalTimeRange(stops),totalCost:stops.reduce((a,s)=>a+s.cost,0)};
+    const finalDetour=stops.length?Math.max(0,num(stops[stops.length-1].routeDeviation,0)):0;
+    const finalNeed=(Math.max(0,(1-progress)*distance)+finalDetour)*consumption/100+finalReserve;
+    const complete=energy+0.000001>=finalNeed;
+    return {ok:complete,remainingEnergyKwh:energy,remainingNeedKwh:finalNeed,stops,totalKwh:stops.reduce((a,s)=>a+s.chargeKwh,0),totalMin:stops.reduce((a,s)=>a+s.chargeMin,0),totalTimeText:totalTimeRange(stops),totalCost:stops.reduce((a,s)=>a+s.cost,0)};
   }
 
 
@@ -4904,17 +4913,19 @@ window.addEventListener('load',()=>{
       const factors=routeFactors(distance,baseConsumption,elev);
       const consumption=factors.adjustedConsumption;
       const pack=await packPromise; const plan=await buildPlan(pack.list,dest,distance,battery,soc,arrival,target,consumption,price,chargeKw,{force80:!!q('rp_force80')?.checked});
-      const energyNeed=distance*consumption/100; const startUsable=Math.max(0,startEnergy-Math.max(1.2,battery*0.02)); const lowSocProblem=energyNeed>startUsable&&!plan.stops.length; const url=mapsUrl(dest,plan.stops);
+      const energyNeed=distance*consumption/100; const lowSocProblem=!plan.ok; const roadUnverified=!prelim.ok; const url=mapsUrl(dest,plan.stops);
       let stopHtml='';
       if(plan.stops.length){stopHtml='<div class="routeStopPreview"><b>Önerilen şarj durakları</b>'+plan.stops.map((s,i)=>`<div class="routeStopPreviewItem"><b>${i+1}. ${esc2(s.name)}</b><br>${esc2(s.address||'')}<br>Yola sapma: <b>${num(s.routeDeviation,0).toFixed(1)} km</b><br>Şarj: <b>${s.chargeKwh.toFixed(1)} kWh</b> · Süre: <b>${s.chargeTimeText||((s.chargeMinLow&&s.chargeMinHigh)?(s.chargeMinLow+'-'+s.chargeMinHigh+' dk'):(s.chargeMin+' dk'))}</b> · Maliyet: <b>${s.cost.toFixed(0)} TL</b>${q('rp_force80')?.checked?`<br>Bu moladan çıkış: <b>%${Math.min(80,Math.round(s.chargeToSoc||80))}</b>`:''}</div>`).join('')+'</div>';}
       else if(lowSocProblem){stopHtml='<p class="strongWarn">Bu şarjla gidiş yönünde güvenli şarj durağı bulunamadı. Lütfen en yakın güvenli noktaya yönlenmeden önce şarj durumunu kontrol et.</p>';}
       else{stopHtml='<p>Bu değerlerle şarj molası gerekmiyor.</p>';}
+      if(lowSocProblem&&plan.stops.length)stopHtml+='<div class="routeWarn"><b>Rota tamamlanamadı.</b> Duraklar tüm yolculuk için yeterli değil. Güvenli rota olarak kullanma.</div>';
+      if(roadUnverified)stopHtml+='<div class="routeWarn">Yol servisi cevap vermedi; mesafe tahminidir. Yol ve istasyon erişimi doğrulanmadı.</div>';
       const climateText={off:'Klima kapalı',eco:'Hafif klima',normal:'Normal klima',high:'Yoğun klima'}[factors.climate]||'Klima';
       const passengerText=factors.passengers>0?`Sürücü + ${factors.passengers} yolcu`:'Sadece sürücü';
       const effectHtml=`<div class="routeEffectNote"><b>Akıllı tüketim hesabı:</b> ${passengerText} · ${climateText}${elev.enabled?` · ${elev.note}`:''}<br>Ortalama tüketim: <b>${baseConsumption.toFixed(1)}</b> → <b>${consumption.toFixed(1)} kWh/100 km</b>${q('rp_force80')?.checked?' · Her molada en fazla %80 hedeflendi':''}</div>`;
       let actionLabel=plan.stops.length?'Duraklı Google Haritalar rotasını aç':'Google Haritalar’da hedef rotasını aç'; if(lowSocProblem)actionLabel='Hedef rotasını aç';
-      if(out){out.innerHTML=`<div class="routeDirectCard ready ${lowSocProblem?'warning':''}"><h3>Rota hazır</h3><p><b>${esc2(dest.name||q('rp_dest')?.value||'Hedef')}</b> için rota hesaplandı.</p><div class="routeMainSummary"><div><span>Durak</span><b>${plan.stops.length}</b></div><div><span>Şarj süresi</span><b>${plan.totalTimeText||Math.ceil(plan.totalMin)+' dk'}</b></div><div><span>Maliyet</span><b>${plan.totalCost.toFixed(0)} TL</b></div></div><p>Mesafe: <b>${distance.toFixed(0)} km</b> · Gerekli enerji: <b>${energyNeed.toFixed(1)} kWh</b> · Başlangıç enerji: <b>${startEnergy.toFixed(1)} kWh</b></p><p>Toplam şarj: <b>${plan.totalKwh.toFixed(1)} kWh</b></p>${effectHtml}${stopHtml}<div class="routeDirectActions"><a href="${url}" target="_blank" rel="noopener">${actionLabel}</a><button onclick="navigator.clipboard&&navigator.clipboard.writeText('${url.replaceAll("'","%27")}');routeToast('Rota linki kopyalandı')">Linki kopyala</button></div><div class="routeVersion" style="display:none">${ROUTE_FIX_VERSION}</div></div>`;}
-      toast('Rota hazır.');
+      if(out){out.innerHTML=`<div class="routeDirectCard ${lowSocProblem||roadUnverified?'warning':'ready'}"><h3>${lowSocProblem?'Güvenli rota bulunamadı':roadUnverified?'Tahmini rota':'Rota hazır'}</h3><p><b>${esc2(dest.name||q('rp_dest')?.value||'Hedef')}</b> için rota hesaplandı.</p><div class="routeMainSummary"><div><span>Durak</span><b>${plan.stops.length}</b></div><div><span>Şarj süresi</span><b>${plan.totalTimeText||Math.ceil(plan.totalMin)+' dk'}</b></div><div><span>Maliyet</span><b>${plan.totalCost.toFixed(0)} TL</b></div></div><p>Mesafe: <b>${distance.toFixed(0)} km</b> · Gerekli enerji: <b>${energyNeed.toFixed(1)} kWh</b> · Başlangıç enerji: <b>${startEnergy.toFixed(1)} kWh</b></p><p>Toplam şarj: <b>${plan.totalKwh.toFixed(1)} kWh</b></p>${effectHtml}${stopHtml}<div class="routeDirectActions"><a href="${url}" target="_blank" rel="noopener">${actionLabel}</a><button onclick="navigator.clipboard&&navigator.clipboard.writeText('${url.replaceAll("'","%27")}');routeToast('Rota linki kopyalandı')">Linki kopyala</button></div><div class="routeVersion" style="display:none">${ROUTE_FIX_VERSION}</div></div>`;}
+      toast(lowSocProblem?'Güvenli rota tamamlanamadı':roadUnverified?'Tahmini rota — kontrol gerekli':'Rota hazır.');
     }catch(err){console.error(err); if(out)out.innerHTML='<div class="routeWarn">Rota kontrolü şu anda cevap vermedi. Lütfen tekrar dene.</div>'; toast('Rota kontrolü cevap vermedi');}
   };
   document.addEventListener('DOMContentLoaded',ensureSmartRouteOptions);
