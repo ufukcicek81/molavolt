@@ -814,17 +814,17 @@ html.mv-admin-start .adminOnly{
   </div>
 
   <main class="customerOnly">
-    <div class="search"><span>🔎</span><input id="searchInput" placeholder="İstasyon, marka veya şehir ara" autocomplete="off" autocapitalize="off" spellcheck="false" oninput="stableSearch()" onkeyup="stableSearch()" onchange="stableSearch()"><button class="menuBtn" onclick="openModal('infoModal')">≡</button></div>
+    <div class="search mvMainSearch"><span>🔎</span><input id="searchInput" type="search" placeholder="Şehir, istasyon veya marka ara…" autocomplete="off" autocapitalize="off" spellcheck="false" oninput="stableSearch()" onkeyup="stableSearch()" onchange="stableSearch()"><button type="button" class="mvSearchClear" id="mvSearchClear" aria-label="Aramayı temizle" onclick="mvClearHomeSearch()" hidden>×</button></div><div class="mvSearchMessage" id="mvSearchMessage" role="status" aria-live="polite"></div>
     <div class="mvServiceBanner"><span>⚡</span><div><b>MolaVolt ile ödeme & şarj</b><small>Yakında hizmete girecek. Şimdilik istasyon bilgileri ve müsaitlik burada.</small></div></div>
-    <div class="chips" id="brandChips"></div>
+    <div class="mvBrandBar"><label for="mvBrandSelect">Şarj ağı</label><select id="mvBrandSelect" aria-label="Şarj ağı seç" onchange="mvSelectBrand(this.value)"><option value="Tümü">Tüm markalar</option></select><button class="mvBrandMore" type="button" id="mvBrandMore" onclick="mvToggleBrands()">Diğer markalar <span aria-hidden="true">⌄</span></button></div><div class="chips" id="brandChips"></div>
     <div class="availabilityFilters" id="availabilityFilters"></div>
     <div class="tab active" id="tab-home">
       <section class="section sponsorHomeSection"><h3>Şarj molası fırsatları</h3><p class="muted">Kodu al, kasada göster, indirim kazan</p><div class="sponsorWrap"><div class="sponsorScroll" id="sponsorCards"></div></div><div class="sponsorDots" id="sponsorDots"></div></section>
       <section class="section homeMapSection">
         <div class="homeMapHead"><div><h3 style="margin:0">Yakındaki istasyonlar</h3><p class="muted" style="margin:4px 0 0">İstasyonları haritada hızlıca keşfet</p></div><button class="mapExpandBtn" type="button" onclick="openHomeMapFullscreen()">⛶ Tam ekran</button></div>
-        <div class="homeMapWrap"><button class="mapFullscreenClose" type="button" onclick="closeHomeMapFullscreen()" aria-label="Haritayı kapat">×</button><div class="homeMapModeBtns"><button id="homeMapNearbyBtn" type="button" onclick="toggleHomeMapNearby()">Yakınım 100</button><button id="homeMapLayerBtn" type="button" onclick="toggleHomeMapLayer()">Uydu</button></div><div id="homeStationMap"></div><div class="homeMapLegend"><span><i class="mapLegendDot"></i> Yakındaki istasyonlar</span><span id="homeMapCount">0 yakın istasyon</span></div></div>
+        <div class="homeMapWrap"><button class="mapFullscreenClose" type="button" onclick="closeHomeMapFullscreen()" aria-label="Haritayı kapat">×</button><div class="homeMapModeBtns"><button id="homeMapNearbyBtn" type="button" onclick="toggleHomeMapNearby()">Yakınım 100</button><button id="homeMapLayerBtn" type="button" onclick="toggleHomeMapLayer()">Uydu</button></div><div id="homeStationMap"></div><div class="homeMapLegend"><span><i class="mapLegendDot"></i> Yakındaki istasyonlar</span><span id="homeMapCount" hidden></span></div></div>
       </section>
-      <section class="section"><h3>Yakındaki istasyonlar</h3><p class="muted" id="countText">Yakındaki istasyonlar</p><p class="muted" id="locStatus" style="font-size:13px;margin-top:4px">Yakındaki istasyonlar konumuna göre sıralanır.</p><div class="sorts"><button id="sortDistance" class="sort active" onclick="setSort('distance')">En yakın</button><button id="sortName" class="sort" onclick="setSort('name')">A-Z</button></div><div class="cards" id="homeCards"></div></section>
+      <section class="section"><h3>Yakındaki istasyonlar</h3><p class="muted" id="countText" hidden></p><p class="muted" id="locStatus" style="font-size:13px;margin-top:4px">Yakındaki istasyonlar konumuna göre sıralanır.</p><div class="sorts"><button id="sortDistance" class="sort active" onclick="setSort('distance')">En yakın</button><button id="sortName" class="sort" onclick="setSort('name')">A-Z</button></div><div class="cards" id="homeCards"></div></section>
     </div>
     <div class="tab" id="tab-stations"><section class="section"><h3>İstasyonlar</h3><p class="muted">Marka seçerek veya arama yaparak filtreleyebilirsin.</p><div class="cards" id="stationCards"></div></section></div>
 
@@ -5749,5 +5749,101 @@ if('serviceWorker' in navigator && (location.protocol==='https:' || location.hos
 })();
 </script>
 
+
+<style id="mv-home-clean-v2-1008">
+/* MV_HOME_SIMPLE_SEARCH_1008 */
+.mvMainSearch{height:54px!important;gap:9px}
+.mvMainSearch input{width:100%;min-width:0;font-size:15px}
+.mvSearchClear{display:grid;place-items:center;flex:0 0 30px;border:0;border-radius:50%;background:rgba(255,255,255,.12);color:white;font-size:21px;width:30px;height:30px}
+.mvSearchClear[hidden]{display:none!important}
+.mvSearchMessage{font-size:12px;color:var(--muted);line-height:1.4}
+.mvSearchMessage:not(:empty){margin:6px 2px 0}
+.mvBrandBar{display:flex;align-items:center;gap:8px;margin-top:13px}
+.mvBrandBar>label{font-size:12px;color:#b0c6d9;white-space:nowrap;font-weight:700}
+.mvBrandBar select{min-width:0;flex:1;padding:11px 29px 11px 12px;background:#0d2232;color:#f1faff;border:1px solid rgba(255,255,255,.17);border-radius:14px;font-size:13px;font-weight:750}
+.mvBrandMore{border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.05);color:#deeeff;font-size:11px;padding:10px;white-space:nowrap}
+#brandChips{display:none!important;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px!important;overflow:visible!important;padding-top:9px}
+#brandChips.mvExpanded{display:grid!important}
+#brandChips>.chip{width:100%!important;min-width:0!important;max-width:none!important;white-space:normal!important;line-height:1.2!important;padding:10px 6px!important;font-size:11px!important}
+#availabilityFilters{display:flex!important;gap:7px!important;flex-wrap:nowrap!important;padding:10px 0 2px!important;overflow:hidden!important}
+#availabilityFilters .availFilter{flex:1 1 0;min-width:0!important;white-space:normal!important;font-size:11px!important;padding:10px 4px!important}
+#availabilityFilters .n{display:none!important}
+#countText,#homeMapCount{display:none!important}
+.homeMapLegend span:has(.mapLegendDot){font-size:11px}
+.mvServiceBanner{display:none!important}
+#tab-home .section>p.muted{font-size:12px}
+@media(max-width:365px){.mvBrandBar>label{display:none}.mvBrandMore{font-size:10px;padding:10px 6px}#availabilityFilters .availFilter{font-size:10px!important}}
+</style>
+<script id="mv-home-clean-js-1008">
+(function(){
+  var brandExpanded=false;
+  const byId=id=>document.getElementById(id);
+  function norm(v){return String(v??'').toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/ı/g,'i').replace(/ğ/g,'g').replace(/ş/g,'s').replace(/ü/g,'u').replace(/ö/g,'o').replace(/ç/g,'c').replace(/\s+/g,' ').trim();}
+  function tokens(q){return norm(q).split(' ').filter(Boolean);}
+  function matches(s,query){
+    const hay=norm([s.name,s.brand,s.operator,s.address,s.city,s.il,s.ilce,s.district,s.sockets,s.power].filter(Boolean).join(' '));
+    return tokens(query).every(t=>hay.includes(t));
+  }
+  function uniqueBrands(){
+    const counts=new Map();
+    (stations||[]).forEach(s=>{const b=String(s.brand||s.operator||'Diğer').trim();if(b)counts.set(b,(counts.get(b)||0)+1)});
+    return [...counts.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],'tr')).map(x=>x[0]);
+  }
+  window.mvSelectBrand=function(b){currentBrand=b||'Tümü';renderChips();applyFilters()};
+  window.mvToggleBrands=function(){brandExpanded=!brandExpanded;const el=byId('brandChips');if(el)el.classList.toggle('mvExpanded',brandExpanded);const b=byId('mvBrandMore');if(b)b.textContent=brandExpanded?'Markaları kapat ⌃':'Diğer markalar ⌄';};
+  window.mvClearHomeSearch=function(){const search=byId('searchInput');if(search){search.value='';search.focus()}currentBrand='Tümü';availabilityFilter='all';renderChips();applyFilters();};
+  function updateSearchUi(){
+    const query=byId('searchInput')?.value.trim()||'',clear=byId('mvSearchClear'),msg=byId('mvSearchMessage');
+    if(clear)clear.hidden=!query;
+    if(msg){msg.textContent=!query?'':filtered.length?'':(stations.length?'Bu aramayla eşleşen istasyon bulunamadı.':'İstasyon verileri henüz yüklenemedi.');}
+  }
+  // Replace scattered brand buttons with one easy select and a collapsible grid.
+  renderChips=function(){
+    const brands=uniqueBrands(),list=['Tümü',...brands.filter(x=>x!=='Tümü')];
+    if(currentBrand!=='Tümü'&&!list.includes(currentBrand))currentBrand='Tümü';
+    const select=byId('mvBrandSelect');
+    if(select){
+      const oldValue=select.value;
+      select.replaceChildren();
+      list.forEach((b)=>{
+        const opt=document.createElement('option');opt.value=b;opt.textContent=b==='Tümü'?'Tüm markalar':b;select.appendChild(opt);
+      });
+      select.value=currentBrand;
+    }
+    const box=byId('brandChips');
+    if(box){
+      box.replaceChildren();
+      list.filter(b=>b!=='Tümü').forEach(b=>{
+        const btn=document.createElement('button');btn.type='button';btn.className='chip'+(currentBrand===b?' active':'');
+        btn.textContent=b;btn.addEventListener('click',()=>{mvSelectBrand(b);brandExpanded=false;box.classList.remove('mvExpanded');const more=byId('mvBrandMore');if(more)more.textContent='Diğer markalar ⌄';});
+        box.appendChild(btn);
+      });
+      box.classList.toggle('mvExpanded',brandExpanded);
+    }
+  };
+  // A search always searches all operators; previous selected brand no longer silently hides results.
+  function cleanFilter(){
+    const q=byId('searchInput')?.value.trim()||'';
+    const filterBrand=q?'Tümü':currentBrand;
+    filtered=(stations||[]).filter(s=>{
+      const isBrand=filterBrand==='Tümü'||s.brand===filterBrand;
+      const isAvailable=availabilityFilter==='all'||
+        (availabilityFilter==='ok'&&s.availabilityKey==='ok')||
+        (availabilityFilter==='busy'&&s.availabilityKey==='busy')||
+        (availabilityFilter==='unknown'&&(!s.availabilityKey||s.availabilityKey==='unknown'||s.availabilityKey==='off'));
+      return isBrand&&matches(s,q)&&isAvailable;
+    }).sort((a,b)=>sortMode==='name'?String(a.name||'').localeCompare(String(b.name||''),'tr'):(Number(a.distance)||0)-(Number(b.distance)||0));
+    homeLimit=30;stationLimit=60;
+    renderAll();updateSearchUi();
+  }
+  applyFilters=cleanFilter;
+  // Suppress irrelevant numerical counters in the home and map view.
+  const oldCards=renderCards;
+  renderCards=function(){oldCards();const el=byId('countText');if(el)el.textContent='';};
+  const oldAll=renderAll;
+  renderAll=function(){oldAll();updateSearchUi();};
+  window.addEventListener('load',function(){renderChips();applyFilters()});
+})();
+</script>
 </body>
 </html>
