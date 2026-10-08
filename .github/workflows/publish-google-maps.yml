@@ -1,0 +1,27 @@
+name: Google Maps anahtarını yayınla
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Validate and publish browser-restricted Google Maps key
+        env:
+          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+        run: |
+          if [ -z "$GOOGLE_MAPS_API_KEY" ]; then
+            echo "::error::GOOGLE_MAPS_API_KEY secret bulunamadı"
+            exit 1
+          fi
+          node -e 'require("fs").writeFileSync("google-maps-config.js","window.MOLAVOLT_GOOGLE_MAPS_KEY="+JSON.stringify(process.env.GOOGLE_MAPS_API_KEY)+";\n")'
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add google-maps-config.js
+          git diff --cached --quiet && exit 0
+          git commit -m "Google Maps tarayıcı anahtarını siteye yayınla"
+          git push
