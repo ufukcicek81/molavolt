@@ -5500,5 +5500,15 @@ body:not(.admin-mode){padding-bottom:calc(78px + env(safe-area-inset-bottom,0px)
  window.addEventListener('load',init);
 })();
 </script>
+<script id="mv-pwa-refresh-1008">
+/* Always check for updated MolaVolt PWA code; users keep their saved data. */
+if('serviceWorker' in navigator && (location.protocol==='https:' || location.hostname==='localhost')){
+ window.addEventListener('load',function(){
+  navigator.serviceWorker.register('./sw.js?v=20261008-3',{scope:'./',updateViaCache:'none'})
+   .then(function(reg){return reg.update();})
+   .catch(function(e){console.warn('MolaVolt update check:',e);});
+ });
+}
+</script>
 </body>
 </html>
