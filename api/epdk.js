@@ -31,62 +31,84 @@ export default async function handler(req, res) {
   function priceValue(o,depth=0){if(!o||typeof o!=="object"||depth>6)return NaN;for(const k of PRICE_KEYS){if(Object.prototype.hasOwnProperty.call(o,k)){const n=num(o[k]);if(Number.isFinite(n)&&n>0&&n<100)return n;const p=parseMaybe(o[k]);if(p&&typeof p==="object"){const n2=priceValue(p,depth+1);if(Number.isFinite(n2))return n2;}}}for(const k of Object.keys(o)){const v=o[k];if(v&&typeof v==="object"){const n=priceValue(v,depth+1);if(Number.isFinite(n)&&n>0&&n<100)return n;}else if(typeof v==="string"&&/(tl|₺|kwh|fiyat|price|tarife|ücret|ucret)/i.test(k)){const n=num(v);if(Number.isFinite(n)&&n>0&&n<100)return n;}}return NaN}
   function power(o){return firstValue(o,["soketGucu","soketGücü","guc","güç","kw","power","gucKw","maxGuc","maxGüç"])}
   function socketType(o){return firstValue(o,["soketTipi","soketTuru","socketType","connectorType","tip","konnektorTipi"])}
-  function availabilityScan(o,depth=0,counts={ok:0,busy:0,off:0,total:0},seen={hit:false}){
+
+  // MV_AVAILABILITY_TRUST_1008: explicit socket availability ONLY.
+  // Public station "Aktif" status means operational; it never means an idle socket.
+  function normKey(v){return String(v??"").toLocaleLowerCase("tr-TR").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/ı/g,"i");}
+  function availabilityField(k,inSocket){
+    const key=normKey(k);
+    return /musait|available|availability|free|bos|uygun|occupied|mesgul|rezerv|doluluk|soket.*durum|socket.*status|connector.*status|port.*status/.test(key) ||
+      (inSocket&&/^(durum|status|state)$/.test(key));
+  }
+  function socketArrayKey(k){return /soket|socket|connector|port|sarj.?unite|charge.?point/.test(normKey(k));}
+  function statusValue(v,k,inSocket){
+    const key=normKey(k);
+    if(!availabilityField(k,inSocket))return "";
+    const inverted=/occupied|mesgul|dolu|in.?use/.test(key);
+    if(typeof v==="boolean")return v?(inverted?"busy":"ok"):(inverted?"ok":"busy");
+    const s=normKey(v).trim();
+    if(!s)return "";
+    if(/ariza|bakim|offline|out.?of.?service|fault|hata|devre.?disi/.test(s))return "off";
+    if(/^(dolu|occupied|busy|mesgul|in.?use|rezerve|reserved|charging|sarj.?ediyor)$/.test(s))return "busy";
+    if(/^(musait|uygun|bos|bosta|kullanilabilir|available|free|ready|idle|unoccupied)$/.test(s))return "ok";
+    if(/^(1|true|yes)$/.test(s)&&/available|musait|free|bos|occupied/.test(key))
+      return inverted?"busy":"ok";
+    if(/^(0|false|no)$/.test(s)&&/available|musait|free|bos|occupied/.test(key))
+      return inverted?"ok":"busy";
+    return "";
+  }
+  function availabilityScan(o,depth=0,counts={ok:0,busy:0,off:0,total:0},seen={hit:false},inSocket=false){
     o=parseMaybe(o);
     if(!o||typeof o!=="object"||depth>8)return {counts,hit:seen.hit};
-    if(Array.isArray(o)){o.forEach(x=>availabilityScan(x,depth+1,counts,seen));return {counts,hit:seen.hit};}
+    if(Array.isArray(o)){o.forEach(x=>availabilityScan(x,depth+1,counts,seen,inSocket));return {counts,hit:seen.hit};}
     for(const k of Object.keys(o)){
-      let v=parseMaybe(o[k]), key=String(k).toLocaleLowerCase("tr-TR");
-      const isAvail=/(müsait|musait|uygunluk|uygun|availability|available|kullanim|kullanım|usage|socket.?status|soket.?durum|durum|status|state)/i.test(key);
-      if(isAvail&&(typeof v==="boolean"||typeof v==="string"||typeof v==="number")){
-        const s=String(v).toLocaleLowerCase("tr-TR").trim();
-        let cls="";
-        if(typeof v==="boolean") cls=v?"ok":"busy";
-        else if(/ar[ıi]za|bak[ıi]m|offline|out.?of.?service|fault|hata|devre.?d[ıi]ş[ıi]/i.test(s)) cls="off";
-        else if(/dolu|occupied|in.?use|meşgul|kullan[ıi]l[ıi]yor|rezerve|reserved/i.test(s)) cls="busy";
-        else if(/müsait|musait|uygun|available|free|boş|boşta|ready|haz[ıi]r|aktif|available/i.test(s)) cls="ok";
-        else if(/^(1|true|yes|evet|müsait|musait|available|free|ready)$/i.test(s)) cls="ok";
-        else if(/^(0|false|no|hayır|dolu|occupied|busy|unavailable)$/i.test(s)) cls="busy";
-        if(cls){seen.hit=true;counts.total++;counts[cls]++;}
-      }
-      if(v&&typeof v==="object")availabilityScan(v,depth+1,counts,seen);
+      const v=parseMaybe(o[k]);
+      if(v&&typeof v==="object"){availabilityScan(v,depth+1,counts,seen,inSocket||socketArrayKey(k));continue;}
+      if(typeof v!=="string"&&typeof v!=="boolean"&&typeof v!=="number")continue;
+      const cls=statusValue(v,k,inSocket);
+      if(cls){seen.hit=true;counts.total++;counts[cls]++;}
     }
     return {counts,hit:seen.hit};
   }
   function availabilityCounts(o,depth=0,out={free:NaN,total:NaN,busy:NaN,off:NaN}){
-    o=parseMaybe(o); if(!o||typeof o!=="object"||depth>8)return out;
+    o=parseMaybe(o);if(!o||typeof o!=="object"||depth>8)return out;
     if(Array.isArray(o)){o.forEach(x=>availabilityCounts(x,depth+1,out));return out;}
     for(const k of Object.keys(o)){
-      const v=parseMaybe(o[k]); const key=String(k).toLocaleLowerCase("tr-TR").replace(/[ıİ]/g,"i");
+      const v=parseMaybe(o[k]),key=normKey(k);
+      if(v&&typeof v==="object"){availabilityCounts(v,depth+1,out);continue;}
+      if(typeof v!=="number"&&typeof v!=="string")continue;
       const n=num(v);
-      if(Number.isFinite(n)){
-        if(/(kullanilabilir|kullanabilir|musait|uygun).*?(soket|socket|unit|connector|port)/i.test(key)||/(soket|socket|unit|connector|port).*?(kullanilabilir|kullanabilir|musait|uygun)/i.test(key)) out.free=n;
-        if(/(toplam|total|adet|sayi|sayisi).*?(soket|socket|unit|connector|port)/i.test(key)||/(soket|socket|unit|connector|port).*?(toplam|total|adet|sayi|sayisi)/i.test(key)) out.total=n;
-        if(/(dolu|mesgul|occupied|busy).*?(soket|socket|unit|connector|port)/i.test(key)) out.busy=n;
-        if(/(ariza|bakim|fault|offline).*?(soket|socket|unit|connector|port)/i.test(key)) out.off=n;
-      }
-      if(v&&typeof v==="object")availabilityCounts(v,depth+1,out);
+      if(!Number.isFinite(n)||n<0||!Number.isInteger(n))continue;
+      const isConnector=/soket|socket|unit|unite|connector|port/.test(key);
+      const isCount=/sayisi|sayi|adet|count|number|num|total/.test(key);
+      if(isConnector&&(/musait|kullanilabilir|available|free|bos/.test(key)))out.free=n;
+      else if(isConnector&&(/dolu|mesgul|occupied|busy/.test(key)))out.busy=n;
+      else if(isConnector&&(/ariza|bakim|fault|offline/.test(key)))out.off=n;
+      else if(isConnector&&(/toplam|total|adet|sayisi|sayi|count|number|num/.test(key)))out.total=n;
+      // Some connector summaries omit "socket" in the field name but include explicit counts.
+      else if(isCount&&/^(availablecount|freecount|musaitadet|bosadet|availableports|freeports)$/.test(key))out.free=n;
     }
     return out;
   }
   function availabilitySummary(o){
-    const x=availabilityScan(o), c=x.counts;
+    const scan=availabilityScan(o),c=scan.counts;
     const n=availabilityCounts(o);
-    if(Number.isFinite(n.total)&&n.total>0){
-      const free=Number.isFinite(n.free)?Math.max(0,Math.min(n.total,n.free)):NaN;
-      const busy=Number.isFinite(n.busy)?Math.max(0,Math.min(n.total,n.busy)):NaN;
-      const off=Number.isFinite(n.off)?Math.max(0,Math.min(n.total,n.off)):NaN;
-      if(Number.isFinite(free)){ if(free>=n.total)return {key:"ok",label:"Müsait",counts:{...c,ok:free,total:n.total}}; if(free>0)return {key:"ok",label:String(free)+"/"+String(n.total)+" müsait",counts:{...c,ok:free,busy:Number.isFinite(busy)?busy:Math.max(0,n.total-free),total:n.total}}; }
-      if(Number.isFinite(busy)&&busy>=n.total)return {key:"busy",label:"Dolu",counts:{...c,busy:busy,total:n.total}};
-      if(Number.isFinite(off)&&off>=n.total)return {key:"off",label:"Arızalı / bakım",counts:{...c,off:off,total:n.total}};
+    const total=Number.isFinite(n.total)&&n.total>0?n.total:NaN;
+    const free=Number.isFinite(n.free)?Math.max(0,n.free):NaN;
+    if(Number.isFinite(free)){
+      if(free===0)return {key:"busy",label:"Müsait soket yok",counts:{...c,ok:0,total:Number.isFinite(total)?total:c.total},source:"socket-count"};
+      return {key:"ok",label:Number.isFinite(total)&&free<total?free+"/"+total+" müsait": "Müsait",counts:{...c,ok:free,total:Number.isFinite(total)?total:Math.max(c.total,free)},source:"socket-count"};
     }
-    if(!x.hit||!c.total)return {key:"unknown",label:"Müsaitlik bilinmiyor",counts:c};
-    if(c.ok===c.total)return {key:"ok",label:"Müsait",counts:c};
-    if(c.ok>0)return {key:"ok",label:String(c.ok)+"/"+String(c.total)+" müsait",counts:c};
-    if(c.busy===c.total)return {key:"busy",label:"Dolu",counts:c};
-    if(c.off===c.total)return {key:"off",label:"Arızalı / bakım",counts:c};
-    if(c.busy>0)return {key:"busy",label:"Kısmen dolu",counts:c};
-    return {key:"unknown",label:"Müsaitlik bilinmiyor",counts:c};
+    if(Number.isFinite(total)&&Number.isFinite(n.busy)&&n.busy>=total)
+      return {key:"busy",label:"Müsait soket yok",counts:{...c,busy:n.busy,total},source:"socket-count"};
+    if(Number.isFinite(total)&&Number.isFinite(n.off)&&n.off>=total)
+      return {key:"off",label:"Arızalı / bakım",counts:{...c,off:n.off,total},source:"socket-count"};
+    if(!scan.hit||!c.total)return {key:"unknown",label:"Anlık soket bilgisi yok",counts:c,source:"not-provided"};
+    if(c.ok>0)return {key:"ok",label:c.total>1?c.ok+"/"+c.total+" müsait":"Müsait",counts:c,source:"socket-status"};
+    if(c.busy===c.total)return {key:"busy",label:"Müsait soket yok",counts:c,source:"socket-status"};
+    if(c.off===c.total)return {key:"off",label:"Arızalı / bakım",counts:c,source:"socket-status"};
+    if(c.busy>0)return {key:"busy",label:"Kısmen dolu",counts:c,source:"socket-status"};
+    return {key:"unknown",label:"Anlık soket bilgisi yok",counts:c,source:"not-provided"};
   }
   function addPriceToPower(p,price){const base=String(p??"").trim();if(!Number.isFinite(price))return base;const priceText=`${price.toFixed(2)} TL/kWh`;if(base&&/TL\s*\/\s*kWh/i.test(base))return base;return base?`${base} · ${priceText}`:priceText}
   function enrichRow(raw,cols){
@@ -100,6 +122,7 @@ export default async function handler(req, res) {
     r.molavoltAvailability=availability;
     r.availabilityKey=availability.key;
     r.availabilityLabel=availability.label;
+    r.availabilitySource=availability.source;
     const stationPrice=priceValue(r);
     if(Number.isFinite(stationPrice)){r.fiyat=stationPrice;r.fiyatTl=stationPrice;r.birimFiyat=stationPrice;r.birimFiyatTl=stationPrice;r.sarjHizmetiBirimFiyati=stationPrice;r.sarjHizmetiBirimFiyat=stationPrice;}
     const socketKey=["soketler","sockets","socketler","sarjSoketleri","sarjIstasyonuSoketleri","sarjUniteleri","soketBilgileri","soketBilgisi"].find(k=>r[k]!==undefined&&r[k]!==null);
