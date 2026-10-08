@@ -817,7 +817,7 @@ html.mv-admin-start .adminOnly{
     <div class="search mvMainSearch"><span>🔎</span><input id="searchInput" type="search" placeholder="Şehir, istasyon veya marka ara…" autocomplete="off" autocapitalize="off" spellcheck="false" oninput="stableSearch()" onkeyup="stableSearch()" onchange="stableSearch()"><button type="button" class="mvSearchClear" id="mvSearchClear" aria-label="Aramayı temizle" onclick="mvClearHomeSearch()" hidden>×</button></div><div class="mvSearchMessage" id="mvSearchMessage" role="status" aria-live="polite"></div>
     <div class="mvServiceBanner"><span>⚡</span><div><b>MolaVolt ile ödeme & şarj</b><small>Yakında hizmete girecek. Şimdilik istasyon bilgileri ve müsaitlik burada.</small></div></div>
     <div class="mvBrandBar"><label for="mvBrandSelect">Şarj ağı</label><select id="mvBrandSelect" aria-label="Şarj ağı seç" onchange="mvSelectBrand(this.value)"><option value="Tümü">Tüm markalar</option></select><button class="mvBrandMore" type="button" id="mvBrandMore" onclick="mvToggleBrands()">Diğer markalar <span aria-hidden="true">⌄</span></button></div><div class="chips" id="brandChips"></div>
-    <div class="availabilityFilters" id="availabilityFilters"></div>
+    <div class="availabilityFilters" id="availabilityFilters"></div><div id="mvAvailabilityNotice" class="mvAvailabilityNotice" hidden role="status" aria-live="polite"></div>
     <div class="tab active" id="tab-home">
       <section class="section sponsorHomeSection"><h3>Şarj molası fırsatları</h3><p class="muted">Kodu al, kasada göster, indirim kazan</p><div class="sponsorWrap"><div class="sponsorScroll" id="sponsorCards"></div></div><div class="sponsorDots" id="sponsorDots"></div></section>
       <section class="section homeMapSection">
@@ -5471,10 +5471,10 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
   }
   function availabilityFromRaw(raw){
     if(raw&&raw.molavoltAvailability&&raw.molavoltAvailability.key){
-      return {key:raw.molavoltAvailability.key,label:raw.molavoltAvailability.label||'Müsaitlik bilinmiyor',counts:raw.molavoltAvailability.counts||{ok:0,busy:0,off:0,total:0}};
+      return {key:raw.molavoltAvailability.key,label:raw.molavoltAvailability.label||'Müsaitlik bilinmiyor',counts:raw.molavoltAvailability.counts||{ok:0,busy:0,off:0,total:0},source:raw.molavoltAvailability.source||raw.availabilitySource||'not-provided'};
     }
     if(raw&&(raw.availabilityKey||raw.availabilityLabel)){
-      return {key:raw.availabilityKey||'unknown',label:raw.availabilityLabel||'Müsaitlik bilinmiyor',counts:{ok:0,busy:0,off:0,total:0}};
+      return {key:raw.availabilityKey||'unknown',label:raw.availabilityLabel||'Müsaitlik bilinmiyor',counts:{ok:0,busy:0,off:0,total:0},source:raw.availabilitySource||'not-provided'};
     }
     var counts={ok:0,busy:0,off:0,total:0}, found=false;
     function visit(v,depth,isSocket){
@@ -5512,7 +5512,7 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
     });
     return list.map(function(s){
       var a=map.get(Number(s.lat).toFixed(5)+'|'+Number(s.lon).toFixed(5))||{key:'unknown',label:'Müsaitlik bilinmiyor',counts:{ok:0,busy:0,off:0,total:0}};
-      return Object.assign({},s,a,{availabilityKey:a.key||'unknown',availabilityLabel:a.label||'Müsaitlik bilinmiyor'});
+      return Object.assign({},s,a,{availabilityKey:a.key||'unknown',availabilityLabel:a.label||'Anlık soket bilgisi yok',availabilitySource:a.source||'not-provided'});
     });
   };
 
@@ -5563,14 +5563,72 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
   var oldApply=applyFilters;
   applyFilters=applyAvailabilityFilters;
 
+
+  /* MV_TRUSTED_AVAILABILITY_FILTER_1008 */
+  function trustedAvailability(s){
+    return s&&(s.availabilitySource==='socket-count'||s.availabilitySource==='socket-status');
+  }
+  function verifiedAvailability(){
+    return (stations||[]).filter(trustedAvailability);
+  }
+  function showAvailabilityNotice(text){
+    var el=$('mvAvailabilityNotice');
+    if(!el)return;
+    el.hidden=false;el.replaceChildren();
+    var p=document.createElement('span');p.textContent=text;el.appendChild(p);
+    var a=document.createElement('a');
+    a.href='https://www.epdk.gov.tr/Detay/Icerik/1-3428/serbest-erisim-platformu--sarj%40tr';
+    a.textContent='EPDK Şarj@TR';a.target='_blank';a.rel='noopener noreferrer';el.appendChild(a);
+    var b=document.createElement('button');b.type='button';b.textContent='↻ Yenile';b.addEventListener('click',function(){window.mvRefreshAvailabilityNow();});
+    el.appendChild(b);
+  }
+  window.mvExplainAvailability=function(){
+    showAvailabilityNotice('MolaVolt şu anda doğrulanmış canlı soket durumu alamıyor. İstasyonların dolu olduğu anlamına gelmez. ');
+  };
+  window.mvRefreshAvailabilityNow=async function(){
+    var el=$('mvAvailabilityNotice');if(el)showAvailabilityNotice('Anlık soket verisi tekrar kontrol ediliyor… ');
+    var controller=new AbortController(),timeout=setTimeout(function(){controller.abort()},19000);
+    try{
+      var res=await fetch(DEFAULT_EPDK_URL+'?availabilityRefresh='+Date.now(),{cache:'no-store',signal:controller.signal});
+      if(!res.ok)throw new Error('Servis HTTP '+res.status);
+      var data=await res.json(),list=normalizeEpdkData(data);
+      if(!Array.isArray(list)||!list.length)throw new Error('İstasyon verisi boş');
+      setEpdkStations(list);buildStations();renderChips();applyFilters();
+      if(window.renderHomeStationMap)setTimeout(window.renderHomeStationMap,150);
+      var verified=verifiedAvailability();
+      if(verified.length){
+        if(el){el.hidden=true;el.replaceChildren();}
+      }else showAvailabilityNotice('İstasyon listesi güncellendi; servis anlık boş/dolu soket bilgisi göndermiyor. ');
+    }catch(err){console.warn('MolaVolt müsaitlik yenileme:',err);showAvailabilityNotice('Anlık müsaitlik servisine ulaşılamadı. İstasyon bilgileri korunuyor. ');}
+    finally{clearTimeout(timeout);}
+  };
   function renderAvailabilityFilters(){
     var el=$('availabilityFilters');if(!el)return;
-    var counts={all:stations.length,ok:0,busy:0,unknown:0};
-    stations.forEach(function(s){if(s.availabilityKey==='ok')counts.ok++;else if(s.availabilityKey==='busy')counts.busy++;else counts.unknown++});
-    var items=[['all','Tümü'],['ok','Müsait'],['busy','Dolu / kısmen dolu'],['unknown','Bilinmiyor']];
-    el.innerHTML=items.map(function(x){return '<button class="availFilter '+(availabilityFilter===x[0]?'active':'')+'" onclick="setAvailabilityFilter(\''+x[0]+'\')">'+x[1]+'<span class="n">'+counts[x[0]]+'</span></button>'}).join('');
+    var known=verifiedAvailability();
+    var items=[['all','Tümü']];
+    if(known.length)items.push(['ok','Müsait'],['busy','Dolu']);
+    else items.push(['info','Müsaitlik bilgisi yok']);
+    el.replaceChildren();
+    items.forEach(function(entry){
+      var btn=document.createElement('button');btn.type='button';
+      btn.className='availFilter '+(availabilityFilter===entry[0]?'active':'');
+      btn.textContent=entry[1];
+      btn.addEventListener('click',function(){
+        if(entry[0]==='info'){window.mvExplainAvailability();return;}
+        window.setAvailabilityFilter(entry[0]);
+      });
+      el.appendChild(btn);
+    });
+    if(!known.length&&availabilityFilter!=='all')availabilityFilter='all';
   }
-  window.setAvailabilityFilter=function(v){availabilityFilter=v;window.availabilityFilter=v;renderAvailabilityFilters();applyFilters()};
+  window.setAvailabilityFilter=function(v){
+    if(v==='ok'&&!verifiedAvailability().length){window.mvExplainAvailability();return;}
+    availabilityFilter=v;window.availabilityFilter=v;
+    var note=$('mvAvailabilityNotice');
+    if(note){note.hidden=true;note.replaceChildren();}
+    renderAvailabilityFilters();applyFilters();
+    if(v==='ok'&&!filtered.length)showAvailabilityNotice('Doğrulanmış müsait soket bildirilmedi; bu istasyonların kesinlikle dolu olduğu anlamına gelmez. ');
+  };
   var oldRenderAll=renderAll;
   renderAll=function(){renderAvailabilityFilters();oldRenderAll()};
 
@@ -5852,5 +5910,14 @@ if('serviceWorker' in navigator && (location.protocol==='https:' || location.hos
   window.addEventListener('load',function(){renderChips();applyFilters()});
 })();
 </script>
+
+<style id="mv-availability-clear-1008">
+.mvAvailabilityNotice{font-size:12px;line-height:1.5;margin:9px 0 0;padding:11px 12px;border:1px solid rgba(255,224,129,.27);background:rgba(255,224,129,.07);border-radius:12px;color:#f5e4ba}
+.mvAvailabilityNotice[hidden]{display:none!important}
+.mvAvailabilityNotice a{color:#35ef8d;font-weight:800;margin-left:5px}
+.mvAvailabilityNotice button{display:inline-flex;margin:7px 0 0 7px;border-radius:9px;padding:7px 10px;background:#183c43;border:1px solid rgba(53,239,141,.3);font-size:11px;font-weight:750;color:#ceffe2}
+#availabilityFilters{display:flex!important;align-items:stretch}
+#availabilityFilters .availFilter{flex:1!important;min-width:0!important}
+</style>
 </body>
 </html>
