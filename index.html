@@ -836,12 +836,12 @@ html.mv-admin-start .adminOnly{
             <div class="bigIcon">🧭</div>
             <div>
               <h3 style="margin:0">Rota Planla</h3>
-              <p class="muted" style="margin:4px 0 0">Nereye gideceğini yaz, şarj molasını hesaplayalım</p>
+              <p class="muted" style="margin:4px 0 0">Hedefi ve aracının değerlerini gir, şarj molalarını hesaplayalım</p>
             </div>
           </div>
 
           <div class="routeSimple">
-            <label>Nereye gidiyorsun?</label>
+            <label>1. Varış noktası</label>
             <div class="routeSearchBox">
               <input id="rp_dest" placeholder="İl, ilçe veya tam adres yaz" value="Ankara" autocomplete="off" oninput="routeSuggestInput()" onfocus="routeSuggestInput()">
               <div class="routeSuggest" id="routeSuggest"></div>
@@ -849,20 +849,20 @@ html.mv-admin-start .adminOnly{
 
             <div class="routeQuickGrid">
               <div>
-                <label>Şarjım %</label>
+                <label>Mevcut şarj (%)</label>
                 <input id="rp_soc" type="number" inputmode="decimal" value="45">
               </div>
               <div>
-                <label>Batarya</label>
+                <label>Batarya (kWh)</label>
                 <input id="rp_battery" type="number" inputmode="decimal" value="60">
               </div>
               <div>
-                <label>Tüketim</label>
+                <label>Tüketim (kWh/100 km)</label>
                 <input id="rp_manual" type="number" inputmode="decimal" value="18">
               </div>
             </div>
 
-            <button class="secondaryBtn routeAdvBtn" onclick="toggleRouteAdvanced()">Ayarlar: WLTP, fiyat, varış şarjı</button>
+            <button class="secondaryBtn routeAdvBtn" onclick="toggleRouteAdvanced()">⚙️ Gelişmiş ayarlar (isteğe bağlı)</button>
 
             <div class="routeAdvanced" id="routeAdvanced">
               <label>Tüketim hesabı</label>
@@ -906,7 +906,7 @@ html.mv-admin-start .adminOnly{
               <input id="rp_charge_target" type="hidden" value="80">
             </div>
 
-            <button class="primaryBtn routePrimaryBig" onclick="planEvRoute()">Rota planla</button>
+            <div class="mvRouteHint">2. Araç bilgilerini kontrol et · 3. Rotayı hesapla. Mesafe ve maliyet tahminidir.</div><button class="primaryBtn routePrimaryBig" onclick="planEvRoute()">⚡ Rotamı hesapla</button>
           </div>
         </div>
 
@@ -1994,8 +1994,22 @@ function planEvRoute(){
     const price=routeVal('rp_dc_price',10);
     const chargeKw=routeVal('rp_charge_kw',90);
     const corridor=routeVal('rp_corridor',80);
+    if(!Number.isFinite(distance)||distance<=0||!Number.isFinite(battery)||battery<=0||!Number.isFinite(consumption)||consumption<=0||!Number.isFinite(soc)||soc<0||soc>100||!Number.isFinite(arrival)||arrival<0||arrival>=100||!Number.isFinite(target)||target<=arrival||target>100){throw new Error('Mesafe, batarya, tüketim ve şarj yüzdelerini kontrol et.');}
     const pack=routeStationsAutoDirect(dest,corridor);
     const plan=buildPlanDirect(pack.list,distance,battery,soc,arrival,target,consumption,price,chargeKw);
+    // Şarj duraklarını ve son varışı enerji korunumu ile yeniden simüle et.
+    let simEnergy=battery*soc/100,simProgress=0,simSafe=true;
+    for(const stop of plan.stops){
+      const next=Number(stop.routeProgress);
+      if(!Number.isFinite(next)||next<simProgress||next>1){simSafe=false;break;}
+      simEnergy-=(next-simProgress)*distance*consumption/100;
+      if(simEnergy<battery*arrival/100-0.01){simSafe=false;break;}
+      simEnergy+=Number(stop.chargeKwh)||0;
+      if(simEnergy>battery+0.01){simSafe=false;break;}
+      simProgress=next;
+    }
+    simEnergy-=(1-simProgress)*distance*consumption/100;
+    if(simEnergy<battery*arrival/100-0.01)simSafe=false;
     const mapsUrl=routeGoogleDirectUrl(dest,plan.stops);
 
     const stopNames=plan.stops.length?plan.stops.map((s,i)=>`${i+1}. ${esc(s.name)} · ${s.chargeKwh.toFixed(1)} kWh · ${s.chargeMin} dk`).join('<br>'):'Şarj molası gerekmiyor veya uygun durak bulunamadı.';
@@ -2148,7 +2162,7 @@ function planEvRoute(){
     const energyNeed=distance*consumption/100;
     const startEnergy=battery*soc/100;
     const startUsable=battery*Math.max(0,(soc-arrival))/100;
-    const lowSocProblem=energyNeed>startUsable && !plan.stops.length;
+    const lowSocProblem=!simSafe || (energyNeed>startUsable && !plan.stops.length);
 
     let stopNames='';
     if(plan.stops.length){
@@ -2254,7 +2268,7 @@ function planEvRoute(){
         ${stopHtml}
 
         <div class="routeDirectActions">
-          <a href="${mapsUrl}" target="_blank" rel="noopener">Duraklı Google Haritalar rotasını aç</a>
+          ${lowSocProblem?'<span class="strongWarn">Şarj hesabı güvenli değil; bu rotayı kullanma.</span>':`<a href="${mapsUrl}" target="_blank" rel="noopener">Duraklı Google Haritalar rotasını aç</a>`}
           <button onclick="navigator.clipboard&&navigator.clipboard.writeText('${mapsUrl.replaceAll("'","%27")}');routeToast('Rota linki kopyalandı')">Linki kopyala</button>
         </div>
         <div class="routeVersion">v0518 iOS konum + EPDK timeout düzeltmesi</div>
@@ -5396,5 +5410,15 @@ window.toggleHomeMapNearby=function(){
  document.addEventListener('DOMContentLoaded',function(){var el=document.getElementById('rp_manual');if(el)el.previousElementSibling&&(el.previousElementSibling.textContent='Tüketim (kWh/100 km)');var bat=document.getElementById('rp_battery');if(bat&&bat.previousElementSibling)bat.previousElementSibling.textContent='Batarya (kWh)';var distance=document.getElementById('rp_distance');if(distance)distance.placeholder='Boşsa tahmini hesaplanır';var box=document.querySelector('.routeSimple');if(box){var note=document.createElement('p');note.className='muted';note.style.cssText='font-size:12px;line-height:1.45;margin:8px 0';note.textContent='Hesap: mesafe × tüketim / 100. Gerçek yol mesafesi girilmezse kuş uçuşu mesafeye dayalı tahmin kullanılır; şarj duraklarını ve yol koşullarını kontrol et.';var btn=box.querySelector('.routePrimaryBig');if(btn)box.insertBefore(note,btn);}});
 })();
 </script>
-</body>
+<style id="mv-nav-route-fix-1008">
+.bottomNav{box-sizing:border-box!important;display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;width:calc(100% - 24px)!important;max-width:430px!important;gap:3px!important;padding:7px!important;bottom:max(8px,env(safe-area-inset-bottom))!important}
+.bottomNav .navItem{min-width:0!important;width:100%!important;padding:8px 2px!important;box-sizing:border-box!important;font-size:11px!important}
+.bottomNav .navItem span{font-size:20px!important}
+.routeQuickGrid{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:7px!important}
+.routeQuickGrid>div{min-width:0!important}.routeQuickGrid input{box-sizing:border-box!important;width:100%!important;min-width:0!important;padding:11px 6px!important;font-size:16px!important}
+.routeQuickGrid label{font-size:11px!important;line-height:1.3!important;min-height:29px!important}
+.routeSimple,.routeHero,.routeSearchBox{max-width:100%!important;min-width:0!important;box-sizing:border-box!important}
+.mvRouteHint{font-size:12px;color:#a9bdd0;line-height:1.5;margin:12px 0}
+@media(max-width:380px){.bottomNav{width:calc(100% - 12px)!important}.bottomNav .navItem{font-size:10px!important}.routeQuickGrid{grid-template-columns:1fr!important}.routeQuickGrid label{min-height:0!important}}
+</style></body>
 </html>
