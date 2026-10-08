@@ -843,8 +843,9 @@ html.mv-admin-start .adminOnly{
           <div class="routeSimple">
             <label>1. Varış noktası</label>
             <div class="routeSearchBox">
-              <input id="rp_dest" placeholder="İl, ilçe veya tam adres yaz" value="Ankara" autocomplete="off" oninput="routeSuggestInput()" onfocus="routeSuggestInput()">
-              <div class="routeSuggest" id="routeSuggest"></div>
+              <input id="rp_dest" placeholder="İşletme, mekân veya adres ara" value="" autocomplete="off" enterkeyhint="search" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="routeSuggest" oninput="routeSuggestInput()" onfocus="routeSuggestInput()" onkeydown="routeSearchKeydown(event)">
+              <div class="routeSuggest" id="routeSuggest" role="listbox" aria-label="Google Haritalar yer önerileri"></div>
+              <div class="mvGooglePlaceStatus" id="mvGooglePlaceStatus" aria-live="polite">Google Haritalar’da işletme, adres veya mekân ara. Örnek: Asil Kuyumculuk Düzce, hayvanat bahçesi.</div>
             </div>
 
             <div class="routeQuickGrid">
@@ -1593,53 +1594,163 @@ function routeLocalSuggestions(q){
   const st=(stations||[]).filter(s=>normalizeTextTR(s.name+' '+s.address+' '+s.brand).includes(n)).slice(0,6).map(s=>({name:s.name,sub:s.address,lat:s.lat,lon:s.lon,type:'station'}));
   return [...city,...st].slice(0,8);
 }
-function showRouteSuggest(items){
-  const box=$('routeSuggest'); if(!box)return;
-  if(!items.length){box.classList.remove('show');box.innerHTML='';return}
-  box.innerHTML=items.map((x,i)=>`<button type="button" onclick="chooseRouteSuggest(${i})">${esc(x.name)}<small>${esc(x.sub||'')}</small></button>`).join('');
-  box._items=items; box.classList.add('show');
+/* MV_GOOGLE_PLACES_DEST_1008: Google Places (New) location search. */
+let mvGoogleRouteSerial=0, mvGoogleRouteToken=null, mvGoogleRouteLibrary=null, mvGoogleRouteSelecting=false;
+let mvGoogleRouteSelectedInput='';
+function mvGoogleRouteStatus(message,state){
+  const el=document.getElementById('mvGooglePlaceStatus');
+  if(el){el.textContent=message;el.dataset.state=state||'idle';}
 }
-function chooseRouteSuggest(i){
-  const box=$('routeSuggest'); const x=box?._items?.[i]; if(!x)return;
-  routeSelectedDest={name:x.name,lat:Number(x.lat),lon:Number(x.lon),sub:x.sub||''};
-  $('rp_dest').value=x.name;
-  box.classList.remove('show');
+function mvGoogleHideSuggestions(){
+  const box=document.getElementById('routeSuggest');
+  if(box){box.classList.remove('show');box.replaceChildren();box._items=[];}
+  const input=document.getElementById('rp_dest');
+  if(input)input.setAttribute('aria-expanded','false');
+}
+function showRouteSuggest(items){
+  const box=document.getElementById('routeSuggest');
+  const input=document.getElementById('rp_dest');
+  if(!box)return;
+  box.replaceChildren();
+  box._items=Array.isArray(items)?items:[];
+  if(!box._items.length){
+    mvGoogleHideSuggestions();
+    return;
+  }
+  box._items.forEach((prediction,i)=>{
+    const button=document.createElement('button');
+    button.type='button';
+    button.setAttribute('role','option');
+    button.setAttribute('aria-label','Google Haritalar: '+prediction.text);
+    const title=document.createElement('span');
+    title.className='mvGooglePredictionName';
+    title.textContent=prediction.text;
+    const sub=document.createElement('small');
+    sub.textContent='Google Haritalar · Yer seç';
+    button.append(title,sub);
+    button.addEventListener('click',()=>chooseRouteSuggest(i));
+    box.appendChild(button);
+  });
+  box.classList.add('show');
+  if(input)input.setAttribute('aria-expanded','true');
+}
+async function mvGetPlacesLibrary(){
+  if(!mvGoogleRouteLibrary){
+    mvGoogleRouteLibrary=(async()=>{
+      if(typeof window.mvEnsureGoogleMaps!=='function')throw new Error('Google Haritalar henüz yüklenemedi.');
+      await window.mvEnsureGoogleMaps();
+      if(!window.google?.maps?.importLibrary)throw new Error('Google Haritalar yer arama kütüphanesi yüklenemedi.');
+      const places=await google.maps.importLibrary('places');
+      if(!places?.AutocompleteSuggestion||!places?.AutocompleteSessionToken)
+        throw new Error('Google Places API (New) kullanılamıyor.');
+      return places;
+    })().catch(err=>{mvGoogleRouteLibrary=null;throw err;});
+  }
+  return mvGoogleRouteLibrary;
+}
+function mvClearRouteSelection(){
+  routeSelectedDest=null;
+  mvGoogleRouteSelectedInput='';
+  window.mvGooglePlaceSelected=null;
 }
 async function routeSuggestInput(){
-  routeSelectedDest=null;
-  const q=($('rp_dest')?.value||'').trim();
-  if(q.length<2){showRouteSuggest([]);return}
-  const local=routeLocalSuggestions(q);
-  showRouteSuggest(local);
+  if(mvGoogleRouteSelecting)return;
+  mvClearRouteSelection();
+  const q=(document.getElementById('rp_dest')?.value||'').trim();
+  const n=++mvGoogleRouteSerial;
   clearTimeout(routeGeoTimer);
+  mvGoogleHideSuggestions();
+  if(q.length<2){
+    mvGoogleRouteStatus(q?'Aramak için en az 2 karakter yaz.':'Google Haritalar’da bir işletme, mekân veya adres ara.','idle');
+    mvGoogleRouteToken=null;
+    return;
+  }
+  mvGoogleRouteStatus('Google Haritalar’da aranıyor…','loading');
   routeGeoTimer=setTimeout(async()=>{
     try{
-      const url='https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=tr&q='+encodeURIComponent(q);
-      const res=await fetch(url,{headers:{'Accept':'application/json'}});
-      const data=await res.json();
-      const remote=(Array.isArray(data)?data:[]).map(x=>({name:(x.display_name||q).split(',').slice(0,2).join(','),sub:x.display_name||'',lat:parseFloat(x.lat),lon:parseFloat(x.lon),type:'address'})).filter(x=>isFinite(x.lat)&&isFinite(x.lon));
-      const merged=[...local,...remote].filter((x,idx,arr)=>arr.findIndex(y=>Math.abs(y.lat-x.lat)<.001&&Math.abs(y.lon-x.lon)<.001)===idx).slice(0,8);
-      if(($('rp_dest')?.value||'').trim()===q)showRouteSuggest(merged);
-    }catch(e){}
-  },450);
+      const places=await mvGetPlacesLibrary();
+      if(n!==mvGoogleRouteSerial)return;
+      if(!mvGoogleRouteToken)mvGoogleRouteToken=new places.AutocompleteSessionToken();
+      const req={input:q,sessionToken:mvGoogleRouteToken,region:'tr',includedRegionCodes:['tr']};
+      // Soft bias toward the current position. Countrywide results remain available.
+      const originLat=Number(userPos?.lat),originLon=Number(userPos?.lon);
+      if(Number.isFinite(originLat)&&Number.isFinite(originLon))
+        req.locationBias={circle:{center:{lat:originLat,lng:originLon},radius:75000}};
+      const response=await places.AutocompleteSuggestion.fetchAutocompleteSuggestions(req);
+      if(n!==mvGoogleRouteSerial||(document.getElementById('rp_dest')?.value||'').trim()!==q)return;
+      const items=(response?.suggestions||[])
+        .filter(x=>x?.placePrediction)
+        .slice(0,8)
+        .map(x=>({prediction:x.placePrediction,text:String(x.placePrediction.text||'').trim()}))
+        .filter(x=>x.text);
+      if(!items.length){
+        mvGoogleRouteStatus('Google Haritalar’da eşleşen yer bulunamadı. Daha açık bir adres veya işletme adı yaz.','empty');
+        mvGoogleHideSuggestions();
+        return;
+      }
+      showRouteSuggest(items);
+      mvGoogleRouteStatus('Google Haritalar’dan doğru konumu seç.','ready');
+    }catch(err){
+      if(n!==mvGoogleRouteSerial)return;
+      console.warn('MolaVolt Google Places:',err);
+      mvGoogleHideSuggestions();
+      mvGoogleRouteStatus('Google yer araması kullanılamıyor. Google Cloud’da Places API (New), alan adı izni ve faturalandırmayı kontrol et.','error');
+    }
+  },320);
+}
+async function chooseRouteSuggest(i){
+  const box=document.getElementById('routeSuggest'),item=box?._items?.[i];
+  const input=document.getElementById('rp_dest');
+  if(!item?.prediction||!input||mvGoogleRouteSelecting)return;
+  const queryAtSelect=input.value.trim();
+  const n=++mvGoogleRouteSerial;
+  clearTimeout(routeGeoTimer);
+  mvGoogleRouteSelecting=true;
+  mvGoogleRouteStatus('Seçilen yerin Google koordinatları alınıyor…','loading');
+  try{
+    const place=item.prediction.toPlace();
+    await place.fetchFields({fields:['id','displayName','formattedAddress','location']});
+    if(n!==mvGoogleRouteSerial||input.value.trim()!==queryAtSelect)return;
+    const lat=typeof place.location?.lat==='function'?place.location.lat():Number(place.location?.lat);
+    const lon=typeof place.location?.lng==='function'?place.location.lng():Number(place.location?.lng);
+    if(!Number.isFinite(lat)||!Number.isFinite(lon))throw new Error('Bu yer için koordinat bulunamadı.');
+    const label=[place.displayName||item.text,place.formattedAddress||''].filter(Boolean).join(' · ');
+    routeSelectedDest={name:place.displayName||item.text,lat,lon,sub:place.formattedAddress||'',placeId:place.id||'',source:'google-places'};
+    window.mvGooglePlaceSelected=routeSelectedDest;
+    mvGoogleRouteSelectedInput=label;
+    input.value=label;
+    mvGoogleRouteToken=null;
+    mvGoogleHideSuggestions();
+    mvGoogleRouteStatus('✓ Google Haritalar konumu seçildi. Rotayı hesaplayabilirsin.','success');
+  }catch(err){
+    console.warn('MolaVolt Google Places details:',err);
+    mvClearRouteSelection();
+    mvGoogleRouteStatus('Bu yerin koordinatları alınamadı. Google Places erişimini kontrol edip yeniden seç.','error');
+    mvGoogleHideSuggestions();
+  }finally{mvGoogleRouteSelecting=false;}
+}
+function routeSearchKeydown(event){
+  if(event.key==='Escape'){mvGoogleHideSuggestions();return;}
+  if(event.key==='ArrowDown'){
+    const first=document.querySelector('#routeSuggest button');
+    if(first){event.preventDefault();first.focus();}
+  }
+  if(event.key==='Enter'){
+    const box=document.getElementById('routeSuggest');
+    if(box?.classList.contains('show')&&box._items?.length){
+      event.preventDefault();
+      chooseRouteSuggest(0);
+    }
+  }
 }
 async function resolveRouteDestination(){
-  if(routeSelectedDest)return routeSelectedDest;
-  const q=($('rp_dest')?.value||'Ankara').trim();
-  const local=routeLocalSuggestions(q)[0];
-  if(local){routeSelectedDest={name:local.name,lat:local.lat,lon:local.lon,sub:local.sub};return routeSelectedDest}
-  try{
-    const url='https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=tr&q='+encodeURIComponent(q);
-    const res=await fetch(url,{headers:{'Accept':'application/json'}});
-    const data=await res.json();
-    const first=Array.isArray(data)?data[0]:null;
-    if(first){
-      routeSelectedDest={name:q,lat:parseFloat(first.lat),lon:parseFloat(first.lon),sub:first.display_name||''};
-      return routeSelectedDest;
-    }
-  }catch(e){}
-  routeSelectedDest={name:'Ankara',lat:39.9334,lon:32.8597,sub:'Varsayılan hedef'};
-  return routeSelectedDest;
+  const typed=(document.getElementById('rp_dest')?.value||'').trim();
+  const chosen=window.mvGooglePlaceSelected;
+  if(!typed||!chosen||typed!==mvGoogleRouteSelectedInput||
+    !Number.isFinite(Number(chosen.lat))||!Number.isFinite(Number(chosen.lon))){
+    throw new Error('Google Haritalar önerilerinden bir varış yeri seç.');
+  }
+  return chosen;
 }
 function routeVal(id,def=0){const v=parseFloat(String($(id)?.value||'').replace(',','.'));return isFinite(v)?v:def}
 function pointLineDistanceKm(a,b,p){const ax=a.lat,ay=a.lon,bx=b.lat,by=b.lon,px=p.lat,py=p.lon;const abx=bx-ax,aby=by-ay,apx=px-ax,apy=py-ay;const ab2=abx*abx+aby*aby||1;let t=(apx*abx+apy*aby)/ab2;t=Math.max(0,Math.min(1,t));const lat=ax+t*abx,lon=ay+t*aby;return{distance:km(px,py,lat,lon),progress:t}}
@@ -5595,5 +5706,46 @@ if('serviceWorker' in navigator && (location.protocol==='https:' || location.hos
  });
 }
 </script>
+
+<style id="mv-google-places-route-style-1008">
+#tab-route .routeSearchBox{z-index:30;isolation:isolate}
+#tab-route .routeSuggest{z-index:2500!important;max-height:min(325px,50dvh)!important;overflow-y:auto!important}
+#tab-route .routeSuggest button{padding:13px 14px!important;line-height:1.3!important}
+#tab-route .routeSuggest button:hover,#tab-route .routeSuggest button:focus{background:rgba(53,239,141,.12)!important;outline:2px solid rgba(53,239,141,.35)}
+#tab-route .routeSuggest .mvGooglePredictionName{display:block!important;font-size:14px!important;font-weight:800!important;color:#f1f8ff!important;white-space:normal!important;max-width:none!important}
+#tab-route .routeSuggest small{font-size:11px;color:#94b4ca;margin-top:4px}
+#tab-route .mvGooglePlaceStatus{font-size:11.5px;line-height:1.4;color:#a4bdce;margin-top:7px}
+#tab-route .mvGooglePlaceStatus[data-state="success"]{color:#35ef8d;font-weight:800}
+#tab-route .mvGooglePlaceStatus[data-state="error"]{color:#ffe081;font-weight:800}
+#tab-route .mvGooglePlaceStatus[data-state="loading"]{color:#65bdf3}
+</style>
+<script id="mv-google-places-route-guard-1008">
+(function(){
+  // Prevent legacy fallback to Ankara or a fuzzy city when a POI is typed.
+  const previous=window.planEvRoute;
+  if(typeof previous!=='function')return;
+  window.planEvRoute=async function(){
+    try{await resolveRouteDestination();}
+    catch(err){
+      const out=document.getElementById('routeResult');
+      if(out){
+        out.replaceChildren();
+        const warn=document.createElement('div');
+        warn.className='routeWarn';
+        warn.textContent=String(err?.message||'Lütfen Google Haritalar’dan doğru konumu seç.');
+        out.appendChild(warn);
+      }
+      document.getElementById('rp_dest')?.focus();
+      return;
+    }
+    return previous.apply(this,arguments);
+  };
+  document.addEventListener('click',function(event){
+    const box=document.querySelector('#tab-route .routeSearchBox');
+    if(box&&!box.contains(event.target))mvGoogleHideSuggestions();
+  });
+})();
+</script>
+
 </body>
 </html>
