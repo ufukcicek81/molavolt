@@ -5434,12 +5434,14 @@ window.toggleHomeMapNearby=function(){
 </style>
 
 <style id="mv-route-fit-v2-1008">
+@media(max-width:700px){
 body:not(.admin-mode) .bottomNav.customerOnly{position:fixed!important;left:5px!important;right:5px!important;top:auto!important;bottom:calc(6px + env(safe-area-inset-bottom,0px))!important;width:auto!important;max-width:none!important;min-width:0!important;transform:none!important;display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:3px!important;padding:5px!important;margin:0!important;box-sizing:border-box!important;overflow:hidden!important;border-radius:19px!important}
 body:not(.admin-mode) .bottomNav.customerOnly .navItem{box-sizing:border-box!important;min-width:0!important;max-width:100%!important;width:100%!important;height:52px!important;padding:4px 0!important;gap:3px!important;overflow:hidden!important}
 body:not(.admin-mode) .bottomNav.customerOnly .navItem .navIcon{width:24px!important;height:24px!important;min-width:24px!important;flex:0 0 24px!important}
 body:not(.admin-mode) .bottomNav.customerOnly .navItem svg{width:19px!important;height:19px!important}
 body:not(.admin-mode) .bottomNav.customerOnly .navItem span:not(.navIcon){min-width:0!important;max-width:100%!important;width:100%!important;display:block!important;overflow:hidden!important;text-overflow:clip!important;white-space:nowrap!important;font-size:10px!important;line-height:1.1!important}
 body:not(.admin-mode){padding-bottom:calc(78px + env(safe-area-inset-bottom,0px))!important}
+}
 #tab-route .routeHero,#tab-route .routeSimple,#tab-route .routeSearchBox,#tab-route .routeDirectCard{min-width:0!important;max-width:100%!important;box-sizing:border-box!important}
 #tab-route .routeSimple{display:flex;flex-direction:column;gap:7px}
 #tab-route .routeQuickGrid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:9px!important;margin-top:3px!important}
