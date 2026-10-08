@@ -5054,10 +5054,12 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
   function getList(){
     var all=Array.isArray(stations)?stations.filter(function(s){return Number.isFinite(Number(s.lat))&&Number.isFinite(Number(s.lon));}):[];
     if(!homeNearbyOnly)return all;
-    return all.slice().sort(function(a,b){return (Number(a.distance)||999999)-(Number(b.distance)||999999)}).slice(0,100);
+    if(!userPos||!Number.isFinite(Number(userPos.lat))||!Number.isFinite(Number(userPos.lon)))return [];
+    var rad=Math.PI/180,lat0=Number(userPos.lat)*rad,lon0=Number(userPos.lon)*rad;
+    return all.slice().sort(function(a,b){function d(s){var lat=Number(s.lat)*rad,lon=Number(s.lon)*rad,x=Math.sin((lat-lat0)/2)**2+Math.cos(lat0)*Math.cos(lat)*Math.sin((lon-lon0)/2)**2;return 6371*2*Math.asin(Math.min(1,Math.sqrt(x)))}return d(a)-d(b)}).slice(0,100);
   }
   function renderHomeStationMap(){
-    var el=document.getElementById('homeStationMap'); if(!el)return; if(window.mvRenderGoogleMap){window.mvRenderGoogleMap();return;} if(typeof L==='undefined')return;
+    var el=document.getElementById('homeStationMap'); if(!el)return; if(typeof L==='undefined')return;
     var list=getList();
     if(!homeMap){
       homeMap=L.map(el,{zoomControl:true,attributionControl:true,scrollWheelZoom:false,dragging:true,doubleClickZoom:true,touchZoom:true}).setView([39.0,35.0],6);
@@ -5109,7 +5111,12 @@ window.closeHomeMapFullscreen=function(){
     document.body.style.overflow='';
     setTimeout(function(){if(homeMap)homeMap.invalidateSize()},120);
 };
-window.toggleHomeMapNearby=function(){homeNearbyOnly=!homeNearbyOnly;renderHomeStationMap()};
+window.toggleHomeMapNearby=function(){
+    if(homeNearbyOnly){homeNearbyOnly=false;renderHomeStationMap();return;}
+    var b=document.getElementById('homeMapNearbyBtn');if(b)b.textContent='Konum alınıyor…';
+    if(!navigator.geolocation){if(b)b.textContent='Yakınım 100';alert('Tarayıcınız konum hizmetini desteklemiyor.');return;}
+    navigator.geolocation.getCurrentPosition(function(p){userPos={lat:p.coords.latitude,lon:p.coords.longitude};homeNearbyOnly=true;renderHomeStationMap();},function(e){if(b)b.textContent='Yakınım 100';alert('Yakındaki istasyonları göstermek için tarayıcıdan konum izni verin. '+(e&&e.message||''));},{enableHighAccuracy:true,timeout:15000,maximumAge:60000});
+  };
   window.toggleHomeMapLayer=function(){
     if(!homeMap||!homeBaseLayer||!homeSatelliteLayer)return;
     if(homeSatellite){homeMap.removeLayer(homeSatelliteLayer);homeBaseLayer.addTo(homeMap)}
@@ -5357,8 +5364,19 @@ window.toggleHomeMapNearby=function(){homeNearbyOnly=!homeNearbyOnly;renderHomeS
     }catch(e){console.error('MolaVolt Google Maps:',e);el.innerHTML='<div style="padding:24px;color:#202b37;background:#fff">Google Harita yüklenemedi: '+escapeHtml(e.message)+'</div>'}
   }
   window.mvRenderGoogleMap=render;
-  window.addEventListener('load',function(){setTimeout(render,500)});
+  /* Ana harita Leaflet tarafından yönetilir; ikinci Google haritası aynı alana çizilmez. */
 })();
 </script>
+<style id="mv-mobile-fit-1008">
+@media(max-width:700px){
+#brandChips,.availabilityFilters{display:flex!important;flex-wrap:wrap!important;overflow:visible!important;gap:7px!important;max-width:100%!important}
+#brandChips>*{flex:0 0 auto!important;max-width:100%!important;padding:9px 12px!important;font-size:12px!important}
+.availabilityFilters>*{flex:0 1 auto!important;font-size:11px!important;padding:8px 10px!important;white-space:normal!important}
+.homeMapHead{flex-wrap:wrap!important}.homeMapModeBtns{top:9px!important;right:9px!important;gap:5px!important}
+.homeMapModeBtns button{padding:7px 8px!important;font-size:11px!important}
+.homeMapWrap .leaflet-top.leaflet-left{top:54px!important}
+.homeMapFullscreen .leaflet-top.leaflet-left{top:55px!important}
+}
+</style>
 </body>
 </html>
