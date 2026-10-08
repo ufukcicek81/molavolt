@@ -5378,5 +5378,23 @@ window.toggleHomeMapNearby=function(){
 .homeMapFullscreen .leaflet-top.leaflet-left{top:55px!important}
 }
 </style>
+
+<style id="mv-route-mobile-1008">
+@media(max-width:700px){.bottomNav.customerOnly{display:grid!important;visibility:visible!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;width:calc(100% - 20px)!important;max-width:440px!important;left:50%!important;right:auto!important;bottom:max(8px,env(safe-area-inset-bottom))!important;transform:translateX(-50%)!important;padding:7px!important;gap:4px!important;box-sizing:border-box!important}.bottomNav.customerOnly .navItem{width:100%!important;min-width:0!important;max-width:none!important;padding:6px 2px!important;height:57px!important;font-size:11px!important}.bottomNav.customerOnly .navItem span:not(.navIcon){font-size:11px!important;max-width:none!important}.routeQuickGrid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important}.routeQuickGrid>div{min-width:0!important}.routeQuickGrid>div:last-child{grid-column:1/-1}.routeSimple input,.routeSimple select{max-width:100%!important;box-sizing:border-box!important}.routeHero,.routeSimple,.routeDirectCard{max-width:100%!important;box-sizing:border-box!important}.routePrimaryBig{width:100%!important;min-height:52px!important}.routeAdvanced{max-width:100%!important}.routeDirectActions{display:flex!important;flex-wrap:wrap!important;gap:8px!important}.routeDirectActions>*{max-width:100%!important;box-sizing:border-box!important;overflow-wrap:anywhere!important}}
+</style>
+<script id="mv-route-validation-1008">
+(function(){
+ var labels={'rp_battery':'Batarya kapasitesi','rp_soc':'Mevcut şarj','rp_manual':'Tüketim','rp_wltp':'WLTP tüketimi','rp_arrival':'Varış rezervi','rp_dc_price':'Şarj fiyatı','rp_charge_kw':'Şarj gücü','rp_distance':'Mesafe'};
+ var original=window.planEvRoute;
+ window.planEvRoute=async function(){
+  var vals={};for(var id in labels){var el=document.getElementById(id);if(el&&el.value.trim()!==''){var v=Number(el.value.replace(',','.'));if(!Number.isFinite(v)){alert(labels[id]+' geçerli bir sayı olmalı.');el.focus();return;}vals[id]=v;}}
+  var checks=[['rp_battery',1,250],['rp_soc',0,100],['rp_manual',1,60],['rp_wltp',1,60],['rp_arrival',0,99],['rp_dc_price',0,100],['rp_charge_kw',1,500],['rp_distance',1,10000]];
+  for(var i=0;i<checks.length;i++){var c=checks[i],v=vals[c[0]];if(v!==undefined&&(v<c[1]||v>c[2])){alert(labels[c[0]]+' '+c[1]+'–'+c[2]+' aralığında olmalı.');document.getElementById(c[0]).focus();return;}}
+  if(vals.rp_soc!==undefined&&vals.rp_arrival!==undefined&&vals.rp_arrival>=vals.rp_soc){var warn=document.getElementById('routeResult');if(warn)warn.innerHTML='<div class="routeWarn">Varış rezervi mevcut şarjdan yüksek veya eşit. Yola çıkmadan şarj gerekebilir.</div>';}
+  return original.apply(this,arguments);
+ };
+ document.addEventListener('DOMContentLoaded',function(){var el=document.getElementById('rp_manual');if(el)el.previousElementSibling&&(el.previousElementSibling.textContent='Tüketim (kWh/100 km)');var bat=document.getElementById('rp_battery');if(bat&&bat.previousElementSibling)bat.previousElementSibling.textContent='Batarya (kWh)';var distance=document.getElementById('rp_distance');if(distance)distance.placeholder='Boşsa tahmini hesaplanır';var box=document.querySelector('.routeSimple');if(box){var note=document.createElement('p');note.className='muted';note.style.cssText='font-size:12px;line-height:1.45;margin:8px 0';note.textContent='Hesap: mesafe × tüketim / 100. Gerçek yol mesafesi girilmezse kuş uçuşu mesafeye dayalı tahmin kullanılır; şarj duraklarını ve yol koşullarını kontrol et.';var btn=box.querySelector('.routePrimaryBig');if(btn)box.insertBefore(note,btn);}});
+})();
+</script>
 </body>
 </html>
