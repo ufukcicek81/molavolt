@@ -1655,8 +1655,9 @@ function mvClearRouteSelection(){
 }
 async function routeSuggestInput(){
   if(mvGoogleRouteSelecting)return;
-  mvClearRouteSelection();
   const q=(document.getElementById('rp_dest')?.value||'').trim();
+  if(q&&routeSelectedDest&&q===mvGoogleRouteSelectedInput)return;
+  mvClearRouteSelection();
   const n=++mvGoogleRouteSerial;
   clearTimeout(routeGeoTimer);
   mvGoogleHideSuggestions();
@@ -1671,11 +1672,11 @@ async function routeSuggestInput(){
       const places=await mvGetPlacesLibrary();
       if(n!==mvGoogleRouteSerial)return;
       if(!mvGoogleRouteToken)mvGoogleRouteToken=new places.AutocompleteSessionToken();
-      const req={input:q,sessionToken:mvGoogleRouteToken,region:'tr',includedRegionCodes:['tr']};
+      const req={input:q,sessionToken:mvGoogleRouteToken,region:'tr',language:'tr',includedRegionCodes:['tr']};
       // Soft bias toward the current position. Countrywide results remain available.
       const originLat=Number(userPos?.lat),originLon=Number(userPos?.lon);
       if(Number.isFinite(originLat)&&Number.isFinite(originLon))
-        req.locationBias={circle:{center:{lat:originLat,lng:originLon},radius:75000}};
+        req.locationBias={center:{lat:originLat,lng:originLon},radius:30000};
       const response=await places.AutocompleteSuggestion.fetchAutocompleteSuggestions(req);
       if(n!==mvGoogleRouteSerial||(document.getElementById('rp_dest')?.value||'').trim()!==q)return;
       const items=(response?.suggestions||[])
@@ -1706,6 +1707,7 @@ async function chooseRouteSuggest(i){
   const n=++mvGoogleRouteSerial;
   clearTimeout(routeGeoTimer);
   mvGoogleRouteSelecting=true;
+  input.readOnly=true;
   mvGoogleRouteStatus('Seçilen yerin Google koordinatları alınıyor…','loading');
   try{
     const place=item.prediction.toPlace();
@@ -1727,7 +1729,7 @@ async function chooseRouteSuggest(i){
     mvClearRouteSelection();
     mvGoogleRouteStatus('Bu yerin koordinatları alınamadı. Google Places erişimini kontrol edip yeniden seç.','error');
     mvGoogleHideSuggestions();
-  }finally{mvGoogleRouteSelecting=false;}
+  }finally{mvGoogleRouteSelecting=false;input.readOnly=false;}
 }
 function routeSearchKeydown(event){
   if(event.key==='Escape'){mvGoogleHideSuggestions();return;}
