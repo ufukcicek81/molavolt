@@ -4857,7 +4857,7 @@ window.addEventListener('load',()=>{
       const used=(segKm+departKm+approachKm)*consumption/100;
       if(!Number.isFinite(used)||energy-used<Math.max(0.15,travelReserve*0.4))break;
       const arrivalEnergy=energy-used;
-      const nextProgress=Math.max(stop.routeProgress||0,progress+segKm/Math.max(distance,1));
+      const nextProgress=(i===0&&lowMode)?Math.max(progress,Math.max(0,num(stop.routeProgress,0))):Math.max(stop.routeProgress||0,progress+segKm/Math.max(distance,1));
       const remainingKm=Math.max(0,(1-nextProgress)*distance); const finalNeed=(remainingKm+Math.max(0,num(stop.routeDeviation,0)))*consumption/100+finalReserve;
       let chargeTo;
       if(force80){
