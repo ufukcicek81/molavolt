@@ -5523,14 +5523,15 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
     return '<span class="availBadge '+key+'">'+icon+' '+esc(label)+'</span>';
   }
   function normalizedAvailability(s){
-    return {availabilityKey:s.availabilityKey||'unknown',availabilityLabel:s.availabilityLabel||'Müsaitlik bilinmiyor'};
+    var trusted=s&&(s.availabilitySource==='socket-count'||s.availabilitySource==='socket-status');
+    return {availabilityKey:trusted?(s.availabilityKey||'unknown'):'unknown',availabilityLabel:trusted?(s.availabilityLabel||'Anlık bilgi yok'):'Anlık bilgi yok'};
   }
   function paymentSoon(){openModal('paymentSoonModal')}
 
   var oldStationCardClean=stationCard;
   stationCard=function(s){
     var a=normalizedAvailability(s), html=oldStationCardClean(s);
-    html=html.replace('<span class="tag b">'+esc(s.status)+'</span>','<span class="tag b">'+esc(s.status)+'</span>'+availBadge(s));
+    html=html.replace('<span class="tag b">'+esc(s.status)+'</span>','<span class="tag b">'+esc(s.status)+'</span>'+availBadge(a));
     return html;
   };
 
@@ -5542,7 +5543,7 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
     if(!s||!box)return;
     var a=normalizedAvailability(s);
     var notice='<div class="mvPaymentSoon"><b>⚡ MolaVolt ile şarj</b><p>Ödeme ve şarj başlatma özelliği roaming/operatör bağlantıları tamamlanınca aktif olacak.</p><button type="button" onclick="paymentSoon()">Şarj Başlat — Yakında</button></div>';
-    var avail='<div style="margin-top:12px">'+availBadge(s)+'</div>';
+    var avail='<div style="margin-top:12px">'+availBadge(a)+'</div>';
     box.innerHTML=box.innerHTML.replace('<div style="margin-top:16px"><h3>Fırsatlar</h3>',avail+notice+'<div style="margin-top:16px"><h3>Fırsatlar</h3>');
   };
 
@@ -5619,7 +5620,7 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
       });
       el.appendChild(btn);
     });
-    if(!known.length&&availabilityFilter!=='all')availabilityFilter='all';
+    if(!known.length&&availabilityFilter!=='all'){availabilityFilter='all';window.availabilityFilter='all';}
   }
   window.setAvailabilityFilter=function(v){
     if(v==='ok'&&!verifiedAvailability().length){window.mvExplainAvailability();return;}
@@ -5893,8 +5894,8 @@ if('serviceWorker' in navigator && (location.protocol==='https:' || location.hos
       const isBrand=filterBrand==='Tümü'||s.brand===filterBrand;
       const activeAvailability=window.availabilityFilter||'all';
       const isAvailable=activeAvailability==='all'||
-        (activeAvailability==='ok'&&s.availabilityKey==='ok')||
-        (activeAvailability==='busy'&&s.availabilityKey==='busy')||
+        (activeAvailability==='ok'&&s.availabilityKey==='ok'&&(s.availabilitySource==='socket-count'||s.availabilitySource==='socket-status'))||
+        (activeAvailability==='busy'&&s.availabilityKey==='busy'&&(s.availabilitySource==='socket-count'||s.availabilitySource==='socket-status'))||
         (activeAvailability==='unknown'&&(!s.availabilityKey||s.availabilityKey==='unknown'||s.availabilityKey==='off'));
       return isBrand&&matches(s,q)&&isAvailable;
     }).sort((a,b)=>sortMode==='name'?String(a.name||'').localeCompare(String(b.name||''),'tr'):(Number(a.distance)||0)-(Number(b.distance)||0));
