@@ -5564,7 +5564,7 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
     var items=[['all','Tümü'],['ok','Müsait'],['busy','Dolu / kısmen dolu'],['unknown','Bilinmiyor']];
     el.innerHTML=items.map(function(x){return '<button class="availFilter '+(availabilityFilter===x[0]?'active':'')+'" onclick="setAvailabilityFilter(\''+x[0]+'\')">'+x[1]+'<span class="n">'+counts[x[0]]+'</span></button>'}).join('');
   }
-  window.setAvailabilityFilter=function(v){availabilityFilter=v;renderAvailabilityFilters();applyFilters()};
+  window.setAvailabilityFilter=function(v){availabilityFilter=v;window.availabilityFilter=v;renderAvailabilityFilters();applyFilters()};
   var oldRenderAll=renderAll;
   renderAll=function(){renderAvailabilityFilters();oldRenderAll()};
 
@@ -5791,7 +5791,7 @@ if('serviceWorker' in navigator && (location.protocol==='https:' || location.hos
   }
   window.mvSelectBrand=function(b){currentBrand=b||'Tümü';renderChips();applyFilters()};
   window.mvToggleBrands=function(){brandExpanded=!brandExpanded;const el=byId('brandChips');if(el)el.classList.toggle('mvExpanded',brandExpanded);const b=byId('mvBrandMore');if(b)b.textContent=brandExpanded?'Markaları kapat ⌃':'Diğer markalar ⌄';};
-  window.mvClearHomeSearch=function(){const search=byId('searchInput');if(search){search.value='';search.focus()}currentBrand='Tümü';availabilityFilter='all';renderChips();applyFilters();};
+  window.mvClearHomeSearch=function(){const search=byId('searchInput');if(search){search.value='';search.focus()}currentBrand='Tümü';window.availabilityFilter='all';if(window.setAvailabilityFilter)window.setAvailabilityFilter('all');renderChips();applyFilters();};
   function updateSearchUi(){
     const query=byId('searchInput')?.value.trim()||'',clear=byId('mvSearchClear'),msg=byId('mvSearchMessage');
     if(clear)clear.hidden=!query;
@@ -5827,10 +5827,11 @@ if('serviceWorker' in navigator && (location.protocol==='https:' || location.hos
     const filterBrand=q?'Tümü':currentBrand;
     filtered=(stations||[]).filter(s=>{
       const isBrand=filterBrand==='Tümü'||s.brand===filterBrand;
-      const isAvailable=availabilityFilter==='all'||
-        (availabilityFilter==='ok'&&s.availabilityKey==='ok')||
-        (availabilityFilter==='busy'&&s.availabilityKey==='busy')||
-        (availabilityFilter==='unknown'&&(!s.availabilityKey||s.availabilityKey==='unknown'||s.availabilityKey==='off'));
+      const activeAvailability=window.availabilityFilter||'all';
+      const isAvailable=activeAvailability==='all'||
+        (activeAvailability==='ok'&&s.availabilityKey==='ok')||
+        (activeAvailability==='busy'&&s.availabilityKey==='busy')||
+        (activeAvailability==='unknown'&&(!s.availabilityKey||s.availabilityKey==='unknown'||s.availabilityKey==='off'));
       return isBrand&&matches(s,q)&&isAvailable;
     }).sort((a,b)=>sortMode==='name'?String(a.name||'').localeCompare(String(b.name||''),'tr'):(Number(a.distance)||0)-(Number(b.distance)||0));
     homeLimit=30;stationLimit=60;
