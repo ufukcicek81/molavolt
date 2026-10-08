@@ -5452,15 +5452,21 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
     }catch(e){return []}
   }
   function classify(v,key,isSocket){
+    // Free socket != active station: only explicit availability or connector status may imply a free slot.
+    var keyText=String(key||'').toLocaleLowerCase('tr-TR');
+    var availabilityField=/müsait|musait|uygun|available|availability|occupied|doluluk|kullanım|kullanim|boş|bos|connector|socket|soket/.test(keyText);
+    var statusField=/durum|status|state/.test(keyText);
     if(typeof v==='boolean'){
-      if(/available|availability|müsait|uygun/i.test(key))return v?'ok':'busy';
-      return '';
+      if(!availabilityField && !(isSocket&&statusField))return '';
+      return v?'ok':'busy';
     }
     var s=String(v??'').toLocaleLowerCase('tr-TR').trim();
     if(!s)return '';
-    if(/ar[ıi]za|bak[ıi]m|out.?of.?service|offline|fault|hata|devre.?d[ıi]ş[ıi]|pasif|inactive/i.test(s))return 'off';
+    if(/ar[ıi]za|bak[ıi]m|out.?of.?service|offline|fault|hata|devre.?d[ıi]ş[ıi]/i.test(s))
+      return isSocket||availabilityField?'off':'';
+    if(!availabilityField && !(isSocket&&statusField))return '';
     if(/dolu|occupied|in.?use|meşgul|kullan[ıi]l[ıi]yor|rezerve|reserved/i.test(s))return 'busy';
-    if(/müsait|uygun|boş|boşta|kullanılabilir|available|free|ready|haz[ıi]r|aktif|active/i.test(s))return 'ok';
+    if(/müsait|uygun|boş|boşta|kullanılabilir|available|free|ready/i.test(s))return 'ok';
     return '';
   }
   function availabilityFromRaw(raw){
@@ -5795,7 +5801,7 @@ if('serviceWorker' in navigator && (location.protocol==='https:' || location.hos
   function updateSearchUi(){
     const query=byId('searchInput')?.value.trim()||'',clear=byId('mvSearchClear'),msg=byId('mvSearchMessage');
     if(clear)clear.hidden=!query;
-    if(msg){msg.textContent=!query?'':filtered.length?'':(stations.length?'Bu aramayla eşleşen istasyon bulunamadı.':'İstasyon verileri henüz yüklenemedi.');}
+    if(msg){const selected=window.availabilityFilter||'all';msg.textContent=selected==='ok'&&filtered.length===0?'Doğrulanmış müsait soket bilgisi bulunamadı. Bu, istasyonların dolu olduğu anlamına gelmez.':(!query?'':filtered.length?'':(stations.length?'Bu aramayla eşleşen istasyon bulunamadı.':'İstasyon verileri henüz yüklenemedi.'));}
   }
   // Replace scattered brand buttons with one easy select and a collapsible grid.
   renderChips=function(){
