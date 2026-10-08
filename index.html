@@ -5057,7 +5057,7 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
     return all.slice().sort(function(a,b){return (Number(a.distance)||999999)-(Number(b.distance)||999999)}).slice(0,100);
   }
   function renderHomeStationMap(){
-    var el=document.getElementById('homeStationMap'); if(!el||typeof L==='undefined')return;
+    var el=document.getElementById('homeStationMap'); if(!el)return; if(window.mvRenderGoogleMap){window.mvRenderGoogleMap();return;} if(typeof L==='undefined')return;
     var list=getList();
     if(!homeMap){
       homeMap=L.map(el,{zoomControl:true,attributionControl:true,scrollWheelZoom:false,dragging:true,doubleClickZoom:true,touchZoom:true}).setView([39.0,35.0],6);
@@ -5309,57 +5309,55 @@ window.toggleHomeMapNearby=function(){homeNearbyOnly=!homeNearbyOnly;renderHomeS
   window.addEventListener('load',function(){setTimeout(function(){renderAvailabilityFilters();applyFilters();refreshAvailabilitySilently()},1200)});
 })();
 </script>
-<script src="google-maps-config.js" onerror="console.info('Google Maps henüz yapılandırılmadı')"></script>
+<script src="google-maps-config.js"></script>
 <script>
 (function(){
-  let googleMap=null,googleMarkers=[],googlePanel=null;
-  function available(){return !!(window.MOLAVOLT_GOOGLE_MAPS_KEY&&window.MOLAVOLT_GOOGLE_MAPS_KEY.startsWith('AIza'))}
-  function loadGoogle(){
-    if(window.google&&window.google.maps)return Promise.resolve();
-    if(window.__mvGooglePromise)return window.__mvGooglePromise;
-    window.__mvGooglePromise=new Promise((resolve,reject)=>{
-      const sc=document.createElement('script');
-      sc.src='https://maps.googleapis.com/maps/api/js?key='+encodeURIComponent(window.MOLAVOLT_GOOGLE_MAPS_KEY)+'&v=weekly&loading=async&language=tr&region=TR&callback=__mvGoogleReady';
-      sc.async=true;sc.onerror=()=>reject(new Error('Google Maps yüklenemedi'));
-      window.__mvGoogleReady=resolve;document.head.appendChild(sc);
-    });
-    return window.__mvGooglePromise;
+  var map=null, markers=[], info=null, loading=null, lastKey='', mapType='roadmap';
+  function escapeHtml(v){return String(v==null?'':v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+  function load(){
+    if(window.google&&google.maps)return Promise.resolve();
+    if(loading)return loading;
+    loading=new Promise(function(resolve,reject){
+      if(!window.MOLAVOLT_GOOGLE_MAPS_KEY){reject(new Error('Google Maps API anahtarı bulunamadı. GitHub Actions anahtar yayınlama işlemini kontrol edin.'));return}
+      window.mvGoogleLoaded=resolve;
+      var el=document.createElement('script');
+      el.src='https://maps.googleapis.com/maps/api/js?key='+encodeURIComponent(window.MOLAVOLT_GOOGLE_MAPS_KEY)+'&v=weekly&loading=async&language=tr&region=TR&callback=mvGoogleLoaded';
+      el.async=true;el.onerror=function(){reject(new Error('Google Maps yüklenemedi'))};document.head.appendChild(el);
+    });return loading;
   }
-  async function toggle(){
-    const mapEl=document.getElementById('homeStationMap');
-    if(!mapEl)return;
-    if(googlePanel){googlePanel.remove();googlePanel=null;document.getElementById('mvGoogleSwitch').textContent='Google Harita';return}
-    if(!available()){alert('Google Maps anahtarı henüz uygulamaya aktarılmadı. GitHub Actions üzerinden Google Maps anahtarını yayınla.');return}
+  function getStations(){
+    try{return typeof stations!=='undefined'&&Array.isArray(stations)?stations:[]}catch(e){return []}
+  }
+  async function render(){
+    var el=document.getElementById('homeStationMap');if(!el)return;
     try{
-      await loadGoogle();
-      googlePanel=document.createElement('div');googlePanel.id='mvGoogleMapPanel';
-      Object.assign(googlePanel.style,{position:'absolute',inset:'0',zIndex:'650',background:'#fff'});
-      mapEl.style.position='relative';mapEl.appendChild(googlePanel);
-      const pos=window.userPos||{lat:39,lon:35};
-      googleMap=new google.maps.Map(googlePanel,{center:{lat:pos.lat||39,lng:pos.lon||35},zoom:6,mapTypeControl:true,streetViewControl:false,fullscreenControl:false});
-      const list=typeof stations!=='undefined'?stations:[];
-      const bounds=new google.maps.LatLngBounds();
-      list.slice(0,1500).forEach(s=>{
-        if(!Number.isFinite(Number(s.lat))||!Number.isFinite(Number(s.lon)))return;
-        const p={lat:Number(s.lat),lng:Number(s.lon)};
-        const marker=new google.maps.Marker({position:p,map:googleMap,title:s.name||'Şarj istasyonu'});
-        const popup=new google.maps.InfoWindow({content:'<strong>'+String(s.name||'Şarj istasyonu').replace(/[<>&]/g,'')+'</strong><br>'+String(s.brand||'').replace(/[<>&]/g,'')+'<br><a target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination='+p.lat+','+p.lng+'">Navigasyon</a>'});
-        marker.addListener('click',()=>popup.open({anchor:marker,map:googleMap}));
-        googleMarkers.push(marker);bounds.extend(p);
+      await load();
+      if(!map){
+        el.innerHTML='';
+        map=new google.maps.Map(el,{center:{lat:39,lng:35},zoom:6,mapTypeId:mapType,mapTypeControl:true,fullscreenControl:false,streetViewControl:false});
+        info=new google.maps.InfoWindow();
+      }
+      var list=getStations().filter(function(s){return Number.isFinite(Number(s.lat))&&Number.isFinite(Number(s.lon))});
+      var key=list.map(function(s){return s.id+':'+s.lat+':'+s.lon+':'+(s.price||'')}).join('|');
+      if(key===lastKey)return;
+      lastKey=key;
+      markers.forEach(function(m){m.setMap(null)});markers=[];
+      var bounds=new google.maps.LatLngBounds();
+      list.forEach(function(s){
+        var lat=Number(s.lat),lon=Number(s.lon),position={lat:lat,lng:lon};
+        var marker=new google.maps.Marker({map:map,position:position,title:s.name||'Şarj istasyonu'});
+        var price=s.priceText||s.price||s.kwhPrice||'';
+        marker.addListener('click',function(){
+          info.setContent('<div style="color:#17212d;min-width:180px"><b>'+escapeHtml(s.name||'Şarj istasyonu')+'</b><div>'+escapeHtml(s.operator||s.brand||'')+'</div><div>'+escapeHtml(s.power||'')+'</div><div>'+escapeHtml(price)+'</div><a target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(lat+','+lon)+'&travelmode=driving">🧭 Yol tarifi</a></div>');
+          info.open({anchor:marker,map:map});
+        });
+        markers.push(marker);bounds.extend(position);
       });
-      if(!bounds.isEmpty())googleMap.fitBounds(bounds);
-      document.getElementById('mvGoogleSwitch').textContent='Önceki Harita';
-    }catch(e){if(googlePanel)googlePanel.remove();googlePanel=null;alert('Google Maps açılamadı: '+e.message)}
+      if(!bounds.isEmpty())map.fitBounds(bounds);
+    }catch(e){console.error('MolaVolt Google Maps:',e);el.innerHTML='<div style="padding:24px;color:#202b37;background:#fff">Google Harita yüklenemedi: '+escapeHtml(e.message)+'</div>'}
   }
-  function add(){
-    if(document.getElementById('mvGoogleSwitch'))return;
-    const mapEl=document.getElementById('homeStationMap');
-    if(!mapEl)return;
-    const b=document.createElement('button');b.id='mvGoogleSwitch';b.type='button';b.textContent='Google Harita';
-    Object.assign(b.style,{position:'absolute',right:'12px',bottom:'12px',zIndex:'800',padding:'9px 12px',borderRadius:'10px',background:'#fff',color:'#111',fontWeight:'700',border:'1px solid #bbb',cursor:'pointer'});
-    mapEl.style.position='relative';mapEl.appendChild(b);b.addEventListener('click',toggle);
-  }
-  window.addEventListener('load',()=>setTimeout(add,700));
+  window.mvRenderGoogleMap=render;
+  window.addEventListener('load',function(){setTimeout(render,500)});
 })();
 </script>
 </body>
