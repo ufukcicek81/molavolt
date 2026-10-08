@@ -5309,5 +5309,58 @@ window.toggleHomeMapNearby=function(){homeNearbyOnly=!homeNearbyOnly;renderHomeS
   window.addEventListener('load',function(){setTimeout(function(){renderAvailabilityFilters();applyFilters();refreshAvailabilitySilently()},1200)});
 })();
 </script>
+<script src="google-maps-config.js" onerror="console.info('Google Maps henüz yapılandırılmadı')"></script>
+<script>
+(function(){
+  let googleMap=null,googleMarkers=[],googlePanel=null;
+  function available(){return !!(window.MOLAVOLT_GOOGLE_MAPS_KEY&&window.MOLAVOLT_GOOGLE_MAPS_KEY.startsWith('AIza'))}
+  function loadGoogle(){
+    if(window.google&&window.google.maps)return Promise.resolve();
+    if(window.__mvGooglePromise)return window.__mvGooglePromise;
+    window.__mvGooglePromise=new Promise((resolve,reject)=>{
+      const sc=document.createElement('script');
+      sc.src='https://maps.googleapis.com/maps/api/js?key='+encodeURIComponent(window.MOLAVOLT_GOOGLE_MAPS_KEY)+'&v=weekly&loading=async&language=tr&region=TR&callback=__mvGoogleReady';
+      sc.async=true;sc.onerror=()=>reject(new Error('Google Maps yüklenemedi'));
+      window.__mvGoogleReady=resolve;document.head.appendChild(sc);
+    });
+    return window.__mvGooglePromise;
+  }
+  async function toggle(){
+    const mapEl=document.getElementById('homeStationMap');
+    if(!mapEl)return;
+    if(googlePanel){googlePanel.remove();googlePanel=null;document.getElementById('mvGoogleSwitch').textContent='Google Harita';return}
+    if(!available()){alert('Google Maps anahtarı henüz uygulamaya aktarılmadı. GitHub Actions üzerinden Google Maps anahtarını yayınla.');return}
+    try{
+      await loadGoogle();
+      googlePanel=document.createElement('div');googlePanel.id='mvGoogleMapPanel';
+      Object.assign(googlePanel.style,{position:'absolute',inset:'0',zIndex:'650',background:'#fff'});
+      mapEl.style.position='relative';mapEl.appendChild(googlePanel);
+      const pos=window.userPos||{lat:39,lon:35};
+      googleMap=new google.maps.Map(googlePanel,{center:{lat:pos.lat||39,lng:pos.lon||35},zoom:6,mapTypeControl:true,streetViewControl:false,fullscreenControl:false});
+      const list=typeof stations!=='undefined'?stations:[];
+      const bounds=new google.maps.LatLngBounds();
+      list.slice(0,1500).forEach(s=>{
+        if(!Number.isFinite(Number(s.lat))||!Number.isFinite(Number(s.lon)))return;
+        const p={lat:Number(s.lat),lng:Number(s.lon)};
+        const marker=new google.maps.Marker({position:p,map:googleMap,title:s.name||'Şarj istasyonu'});
+        const popup=new google.maps.InfoWindow({content:'<strong>'+String(s.name||'Şarj istasyonu').replace(/[<>&]/g,'')+'</strong><br>'+String(s.brand||'').replace(/[<>&]/g,'')+'<br><a target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination='+p.lat+','+p.lng+'">Navigasyon</a>'});
+        marker.addListener('click',()=>popup.open({anchor:marker,map:googleMap}));
+        googleMarkers.push(marker);bounds.extend(p);
+      });
+      if(!bounds.isEmpty())googleMap.fitBounds(bounds);
+      document.getElementById('mvGoogleSwitch').textContent='Önceki Harita';
+    }catch(e){if(googlePanel)googlePanel.remove();googlePanel=null;alert('Google Maps açılamadı: '+e.message)}
+  }
+  function add(){
+    if(document.getElementById('mvGoogleSwitch'))return;
+    const mapEl=document.getElementById('homeStationMap');
+    if(!mapEl)return;
+    const b=document.createElement('button');b.id='mvGoogleSwitch';b.type='button';b.textContent='Google Harita';
+    Object.assign(b.style,{position:'absolute',right:'12px',bottom:'12px',zIndex:'800',padding:'9px 12px',borderRadius:'10px',background:'#fff',color:'#111',fontWeight:'700',border:'1px solid #bbb',cursor:'pointer'});
+    mapEl.style.position='relative';mapEl.appendChild(b);b.addEventListener('click',toggle);
+  }
+  window.addEventListener('load',()=>setTimeout(add,700));
+})();
+</script>
 </body>
 </html>
