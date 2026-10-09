@@ -62,6 +62,18 @@ def generateMolaVoltIcon = tasks.register('generateMolaVoltIcon', Copy) {
     into(layout.buildDirectory.dir('generated/brand-res/drawable-nodpi'))
     rename { String ignored -> 'ic_launcher.png' }
 }
-tasks.matching { it.name.startsWith('merge') && it.name.endsWith('Resources') }.configureEach {
+// Generated resources are consumed by several AGP tasks; explicitly wire each consumer.
+tasks.matching { task ->
+    task.name != 'generateMolaVoltIcon' && (
+        task.name.startsWith('map') ||
+        task.name.startsWith('process') ||
+        task.name.startsWith('merge') ||
+        task.name.startsWith('compile') ||
+        task.name.startsWith('parse') ||
+        task.name.startsWith('generate') ||
+        task.name.startsWith('package') ||
+        task.name.startsWith('bundle')
+    )
+}.configureEach {
     dependsOn(generateMolaVoltIcon)
 }
