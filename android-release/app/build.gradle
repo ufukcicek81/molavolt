@@ -1,0 +1,67 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.molavolt.app'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'com.molavolt.app'
+        minSdk 24
+        targetSdk 36
+        versionCode 10003
+        versionName '1.0.0.3'
+    }
+
+    sourceSets {
+        main {
+            res.srcDir("$buildDir/generated/brand-res")
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    signingConfigs {
+        release {
+            def keyFile = System.getenv('MOLAVOLT_UPLOAD_STORE_FILE')
+            if (keyFile && System.getenv('MOLAVOLT_UPLOAD_KEYSTORE_PASSWORD') &&
+                    System.getenv('MOLAVOLT_UPLOAD_KEY_ALIAS') &&
+                    System.getenv('MOLAVOLT_UPLOAD_KEY_PASSWORD')) {
+                storeFile file(keyFile)
+                storePassword System.getenv('MOLAVOLT_UPLOAD_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('MOLAVOLT_UPLOAD_KEY_ALIAS')
+                keyPassword System.getenv('MOLAVOLT_UPLOAD_KEY_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            def keyFile = System.getenv('MOLAVOLT_UPLOAD_STORE_FILE')
+            if (keyFile && System.getenv('MOLAVOLT_UPLOAD_KEYSTORE_PASSWORD') &&
+                    System.getenv('MOLAVOLT_UPLOAD_KEY_ALIAS') &&
+                    System.getenv('MOLAVOLT_UPLOAD_KEY_PASSWORD')) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+}
+
+dependencies {
+    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.7.3'
+}
+
+// Use the existing MolaVolt logo at the repository root: no placeholder app icon.
+def generateMolaVoltIcon = tasks.register('generateMolaVoltIcon', Copy) {
+    from(rootProject.file('../icon-192.png'))
+    into(layout.buildDirectory.dir('generated/brand-res/drawable-nodpi'))
+    rename { String ignored -> 'ic_launcher.png' }
+}
+tasks.matching { it.name.startsWith('merge') && it.name.endsWith('Resources') }.configureEach {
+    dependsOn(generateMolaVoltIcon)
+}

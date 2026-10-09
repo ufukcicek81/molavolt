@@ -1,0 +1,52 @@
+name: Build MolaVolt Android API 36
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'android-release/**'
+      - '.github/workflows/build-molavolt-android.yml'
+      - 'icon-192.png'
+permissions:
+  contents: read
+jobs:
+  android-aab:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android API 36
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Prepare existing upload key when configured
+        env:
+          KEYSTORE_B64: ${{ secrets.MOLAVOLT_UPLOAD_KEYSTORE_BASE64 }}
+          KEYSTORE_PASS: ${{ secrets.MOLAVOLT_UPLOAD_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.MOLAVOLT_UPLOAD_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.MOLAVOLT_UPLOAD_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ] && [ -n "$KEYSTORE_PASS" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASS" ]; then
+            printf '%s' "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/molavolt-upload.jks"
+            echo "MOLAVOLT_UPLOAD_STORE_FILE=$RUNNER_TEMP/molavolt-upload.jks" >> "$GITHUB_ENV"
+            echo "MOLAVOLT_SIGNING_STATUS=signed" >> "$GITHUB_ENV"
+          else
+            echo "MOLAVOLT_SIGNING_STATUS=UNSIGNED-do-not-upload" >> "$GITHUB_ENV"
+          fi
+      - name: Build API 36 AAB
+        working-directory: android-release
+        env:
+          MOLAVOLT_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.MOLAVOLT_UPLOAD_KEYSTORE_PASSWORD }}
+          MOLAVOLT_UPLOAD_KEY_ALIAS: ${{ secrets.MOLAVOLT_UPLOAD_KEY_ALIAS }}
+          MOLAVOLT_UPLOAD_KEY_PASSWORD: ${{ secrets.MOLAVOLT_UPLOAD_KEY_PASSWORD }}
+        run: gradle :app:bundleRelease --stacktrace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MolaVolt-API36-${{ env.MOLAVOLT_SIGNING_STATUS }}
+          path: android-release/app/build/outputs/bundle/release/*.aab
+          if-no-files-found: error
+          retention-days: 14
