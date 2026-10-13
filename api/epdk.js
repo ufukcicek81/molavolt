@@ -48,8 +48,9 @@ export default async function handler(req, res) {
     if(typeof v==="boolean")return v?(inverted?"busy":"ok"):(inverted?"ok":"busy");
     const s=normKey(v).trim();
     if(!s)return "";
-    if(/ariza|bakim|offline|out.?of.?service|fault|hata|devre.?disi/.test(s))return "off";
-    if(/^(dolu|occupied|busy|mesgul|in.?use|rezerve|reserved|charging|sarj.?ediyor)$/.test(s))return "busy";
+    // Operators report Turkish labels or OCPP 1.6/2.0 connector states (Available, Charging, Faulted...).
+    if(/ariza|bakim|offline|out.?of.?service|fault|hata|devre.?disi|unavailable|inoperative|kullanilamaz|kapali|pasif/.test(s))return "off";
+    if(/^(dolu|occupied|busy|mesgul|in.?use|rezerve|reserved|charging|sarj.?ediyor|sarjda|sarj.?oluyor|kullanimda|kullaniliyor|kullanilmakta|musait.?degil|preparing|finishing|suspended.?ev(se)?)$/.test(s))return "busy";
     if(/^(musait|uygun|bos|bosta|kullanilabilir|available|free|ready|idle|unoccupied)$/.test(s))return "ok";
     if(/^(1|true|yes)$/.test(s)&&/available|musait|free|bos|occupied/.test(key))
       return inverted?"busy":"ok";
