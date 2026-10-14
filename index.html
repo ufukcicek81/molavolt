@@ -821,7 +821,7 @@ html.mv-admin-start .adminOnly{
     <div class="tab active" id="tab-home">
       <section class="section sponsorHomeSection"><h3>Şarj molası fırsatları</h3><p class="muted">Kodu al, kasada göster, indirim kazan</p><div class="sponsorWrap"><div class="sponsorScroll" id="sponsorCards"></div></div><div class="sponsorDots" id="sponsorDots"></div></section>
       <section class="section homeMapSection">
-        <div class="homeMapHead"><div><h3 style="margin:0">Yakındaki istasyonlar</h3><p class="muted" style="margin:4px 0 0">İstasyonları haritada hızlıca keşfet</p></div><button class="mapExpandBtn" type="button" onclick="openHomeMapFullscreen()">⛶ Tam ekran</button></div>
+        <div class="homeMapHead"><div><h3 style="margin:0">Harita</h3><p class="muted" style="margin:4px 0 0">İstasyonları haritada hızlıca keşfet</p></div><button class="mapExpandBtn" type="button" onclick="openHomeMapFullscreen()">⛶ Tam ekran</button></div>
         <div class="homeMapWrap"><button class="mapFullscreenClose" type="button" onclick="closeHomeMapFullscreen()" aria-label="Haritayı kapat">×</button><div class="homeMapModeBtns"><button id="homeMapNearbyBtn" type="button" onclick="toggleHomeMapNearby()">Yakınım 100</button><button id="homeMapLayerBtn" type="button" onclick="toggleHomeMapLayer()">Uydu</button></div><div id="homeStationMap"></div><div class="homeMapLegend"><span><i class="mapLegendDot"></i> Yakındaki istasyonlar</span><span id="homeMapCount" hidden></span></div></div>
       </section>
       <section class="section"><h3>Yakındaki istasyonlar</h3><p class="muted" id="countText" hidden></p><p class="muted" id="locStatus" style="font-size:13px;margin-top:4px">Yakındaki istasyonlar konumuna göre sıralanır.</p><div class="sorts"><button id="sortDistance" class="sort active" onclick="setSort('distance')">En yakın</button><button id="sortName" class="sort" onclick="setSort('name')">A-Z</button></div><div class="cards" id="homeCards"></div></section>
@@ -1006,169 +1006,7 @@ html.mv-admin-start .adminOnly{
 <div class="modal" id="mapModal"><div class="sheet"><button class="close" onclick="closeStationMap()">×</button><h2 id="mapModalTitle">Haritada gör</h2><p class="muted" id="mapModalText">İstasyon konumu</p><div class="mapSheetBody"><div id="stationMap"></div></div><div class="cardActions"><button class="secondaryBtn" onclick="closeStationMap()">Kapat</button><a class="routeBtn" id="mapModalRoute" href="#" target="_blank" rel="noopener">Yol tarifi</a></div></div></div>
 <div class="modal" id="detailModal"><div class="sheet"><button class="close" onclick="closeModal('detailModal')">×</button><div id="detailContent"></div></div></div>
 <div class="modal" id="infoModal"><div class="sheet"><button class="close" onclick="closeModal('infoModal')">×</button><h2>MolaVolt</h2><p class="muted">Yakındaki şarj istasyonlarını kolayca bul, haritada gör ve yol tarifi al.</p><div>UFUK_OFFER_COUNT_FIX_0503 + UFUK_ROUTE_SIMPLE_PREMIUM_0506</div></div></div>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js">
-/* UFUK_ROUTE_MULTI_CLEAN_0511_JS */
-function routeGoogleMultiUrl(dest,stops){
-  const origin=`${userPos.lat},${userPos.lon}`;
-  const destination=`${dest.lat},${dest.lon}`;
-  const waypoints=(stops||[]).slice(0,8).map(s=>`${s.lat},${s.lon}`).join('|');
-  let url=`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&travelmode=driving`;
-  if(waypoints) url+=`&waypoints=${encodeURIComponent(waypoints)}`;
-  return url;
-}
-function routePowerKw(s){
-  const txt=String((s&&s.power)||'');
-  const nums=[...txt.replace(',','.').matchAll(/\d+(\.\d)?/g)].map(m=>parseFloat(m[0])).filter(n=>isFinite(n));
-  return nums.length?Math.max(...nums):0;
-}
-function routeStationsForAuto(dest,baseCorridor){
-  const corridors=[baseCorridor,90,120,160,220].filter((v,i,a)=>v>0&&a.indexOf(v)===i).sort((a,b)=>a-b);
-  let best=[], used=baseCorridor;
-  for(const c of corridors){
-    const list=routeStationsFor(dest,c);
-    if(list.length>best.length){best=list;used=c;}
-    if(list.length>=20)return {list,usedCorridor:c};
-  }
-  return {list:best,usedCorridor:used};
-}
-function chooseReachableStop(routeList,currentProgress,maxProgress){
-  const candidates=routeList.filter(s=>s.routeProgress>currentProgress+0.018 && s.routeProgress<=maxProgress-0.006);
-  if(!candidates.length)return null;
-  candidates.sort((a,b)=>{
-    const far=b.routeProgress-a.routeProgress;
-    if(Math.abs(far)>0.02)return far;
-    return routePowerKw(b)-routePowerKw(a);
-  });
-  return candidates[0];
-}
-function buildMultiStopPlan(routeList,distance,battery,soc,arrival,target,consumption,price,chargeKw){
-  const reserve=battery*Math.max(0,arrival)/100;
-  let energy=battery*Math.max(0,soc)/100;
-  let progress=0;
-  const stops=[];
-  for(let i=0;i<12;i++){
-    const usable=Math.max(0,energy-reserve);
-    const reachableKm=usable/Math.max(consumption,1)*100;
-    const maxProgress=progress+(reachableKm/Math.max(distance,1));
-    if(maxProgress>=1){
-      return {ok:true,stops,totalKwh:stops.reduce((a,s)=>a+s.chargeKwh,0),totalMin:stops.reduce((a,s)=>a+s.chargeMin,0),totalCost:stops.reduce((a,s)=>a+s.cost,0)};
-    }
-    const stop=chooseReachableStop(routeList,progress,maxProgress);
-    if(!stop){
-      return {ok:false,reason:'Bu batarya/şarj değerleriyle bir sonraki güvenli şarj istasyonuna ulaşamıyoruz. Sapma limitini artır, mevcut şarjı yükselt veya varış rezervini düşür.',stops,totalKwh:stops.reduce((a,s)=>a+s.chargeKwh,0),totalMin:stops.reduce((a,s)=>a+s.chargeMin,0),totalCost:stops.reduce((a,s)=>a+s.cost,0)};
-    }
-    const segKm=(stop.routeProgress-progress)*distance;
-    const used=segKm*consumption/100;
-    const arrivalEnergy=Math.max(0,energy-used);
-    const targetEnergy=Math.min(battery,battery*Math.max(target,arrival+5)/100);
-    const chargeKwh=Math.max(0,targetEnergy-arrivalEnergy);
-    const kw=routePowerKw(stop)||chargeKw||90;
-    const chargeMin=Math.ceil(chargeKwh/Math.max(10,kw)*60);
-    stops.push({...stop,segKm,arrivalSoc:(arrivalEnergy/battery*100),chargeKwh,chargeMin,cost:chargeKwh*price,effectiveKw:kw});
-    energy=targetEnergy;
-    progress=stop.routeProgress;
-  }
-  return {ok:false,reason:'Rota 12 moladan fazla gerektiriyor. Daha yüksek batarya/şarj hedefi veya farklı güzergah deneyin.',stops,totalKwh:stops.reduce((a,s)=>a+s.chargeKwh,0),totalMin:stops.reduce((a,s)=>a+s.chargeMin,0),totalCost:stops.reduce((a,s)=>a+s.cost,0)};
-}
-async function planEvRoute(){
-  buildStations();
-  const out=$('routeResult');
-  if(!out)return;
-  if(!stations.length){
-    out.innerHTML='<div class="routeWarn">EPDK istasyon verisi henüz yok. Admin panelden EPDK verisini yükle veya Firebase’den oku.</div>';
-    return;
-  }
-  out.innerHTML='<div class="panel routeResultCard">Çoklu rota hesaplanıyor...</div>';
-  let dest;
-  try{ dest=typeof resolveRouteDestination==='function' ? await resolveRouteDestination() : routeDestination(); }
-  catch(e){ dest=routeDestination(); }
-  const roadFactor=1.18;
-  const estimatedKm=km(userPos.lat,userPos.lon,dest.lat,dest.lon)*roadFactor;
-  const distance=routeVal('rp_distance',estimatedKm);
-  const battery=routeVal('rp_battery',60);
-  const soc=routeVal('rp_soc',45);
-  const arrival=routeVal('rp_arrival',10);
-  const target=routeVal('rp_charge_target',80);
-  const mode=$('rp_mode')?.value||'manual';
-  const consumption=mode==='wltp'?routeVal('rp_wltp',15):routeVal('rp_manual',18);
-  const price=routeVal('rp_dc_price',10);
-  const chargeKw=routeVal('rp_charge_kw',90);
-  const corridor=routeVal('rp_corridor',80);
-
-  const routePack=routeStationsForAuto(dest,corridor);
-  const routeList=routePack.list;
-  const usedCorridor=routePack.usedCorridor;
-  const energyNeed=distance*consumption/100;
-  const startEnergy=battery*soc/100;
-  const plan=buildMultiStopPlan(routeList,distance,battery,soc,arrival,target,consumption,price,chargeKw);
-  const mapsUrl=routeGoogleMultiUrl(dest,plan.stops);
-
-  let html=`<section class="section"><div class="panel">
-    <h3>Çoklu rota planı</h3>
-    <p class="muted">${esc($('rp_dest')?.value||dest.name)} yönüne duraklı şarj rotası</p>
-    <div class="routeSummary">
-      <div class="routeMetric"><span>Mesafe</span><b>${distance.toFixed(0)} km</b></div>
-      <div class="routeMetric"><span>Enerji</span><b>${energyNeed.toFixed(1)} kWh</b></div>
-      <div class="routeMetric"><span>Başlangıç</span><b>${startEnergy.toFixed(1)} kWh</b></div>
-      <div class="routeMetric"><span>Rota istasyonu</span><b>${routeList.length}</b></div>
-    </div>`;
-
-  if(plan.stops.length){
-    html+=`<div class="routeStop">
-      <b>${plan.stops.length} şarj molası önerildi</b>
-      <div class="routeMiniGrid">
-        <div class="routeMini"><span>Toplam şarj</span><b>${plan.totalKwh.toFixed(1)} kWh</b></div>
-        <div class="routeMini"><span>Toplam süre</span><b>${Math.ceil(plan.totalMin)} dk</b></div>
-        <div class="routeMini"><span>Mola maliyeti</span><b>${plan.totalCost.toFixed(0)} TL</b></div>
-      </div>
-      <a class="routeBigLink" href="${mapsUrl}" target="_blank" rel="noopener">Duraklı rotayı Google Haritalar’da aç</a>
-    </div>
-    <div class="routeStopList">`+
-    plan.stops.map((s,i)=>`<div class="routeStopItem">
-      <h4><span class="routeStopNo">${i+1}</span>${esc(s.name)}</h4>
-      <p>${esc(s.address)}<br>Sapma: ${s.routeDeviation.toFixed(1)} km · Rota ilerleme: %${(s.routeProgress*100).toFixed(0)} · Varış şarjı: %${Math.max(0,s.arrivalSoc).toFixed(0)}</p>
-      <div class="routeMiniGrid">
-        <div class="routeMini"><span>Şarj</span><b>${s.chargeKwh.toFixed(1)} kWh</b></div>
-        <div class="routeMini"><span>Süre</span><b>${s.chargeMin} dk</b></div>
-        <div class="routeMini"><span>Maliyet</span><b>${s.cost.toFixed(0)} TL</b></div>
-      </div>
-      <div class="cardActions">
-        <button class="mapShowBtn" onclick="openStationMap('${esc(s.id)}',event)">Haritada gör</button>
-        <a class="routeBtn routeActionBtn" href="${routeUrl(s)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Bu durağa git</a>
-      </div>
-    </div>`).join('')+
-    `</div>`;
-  }else if(plan.ok){
-    const arrivalSoc=soc-(energyNeed/battery*100);
-    html+=`<div class="routeStep"><b>Şarj molası gerekmiyor.</b><p>Bu ayarlarla hedefe yaklaşık %${Math.max(0,arrivalSoc).toFixed(0)} şarjla varırsın.</p><a class="routeBigLink" href="${mapsUrl}" target="_blank" rel="noopener">Google Haritalar’da rotayı aç</a></div>`;
-  }
-
-  if(!plan.ok) html+=`<div class="routeWarn">${esc(plan.reason)}</div>`;
-
-  html+=`<div class="routeWarn">Google Haritalar linki, önerilen şarj istasyonlarını ara durak olarak ekler. Link müşteriye gönderilebilir.</div><div class="routeVersion">v0518 iOS konum + EPDK timeout düzeltmesi · koridor ${usedCorridor} km</div></div></section>`;
-
-  if(routeList.length){
-    html+=`<section class="section"><h3>Rota üzerindeki istasyonlar</h3><p class="muted">${routeList.length} istasyon listeleniyor. Koridor: ${usedCorridor} km</p><div class="cards">`+
-      routeList.slice(0,60).map(s=>`<div class="station" onclick="openDetail('${esc(s.id)}')">
-        <div class="stationTop">
-          <div>
-            <div class="tags"><span class="tag g">${esc(s.brand)}</span><span class="tag y">${esc(s.power||'kW bilgisi yok')}</span></div>
-            <h4>${esc(s.name)}</h4>
-            <p>${esc(s.address)}</p>
-          </div>
-          <div style="text-align:right"><b>${s.routeDeviation.toFixed(1)} km</b><p>sapma<br>%${(s.routeProgress*100).toFixed(0)}</p></div>
-        </div>
-        <div class="cardActions">
-          <button class="mapShowBtn" onclick="openStationMap('${esc(s.id)}',event)">Haritada gör</button>
-          <a class="routeBtn routeActionBtn" href="${routeUrl(s)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Yol tarifi</a>
-        </div>
-      </div>`).join('')+
-    `</div></section>`;
-  }
-  out.innerHTML=html;
-}
-
-</script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 const VERSION='0521',ADMIN_KEY='ufuk8790',DEFAULT_EPDK_URL='https://molavolt.vercel.app/api/epdk';
 const BRANDS=['Tümü','ZES','Eşarj','Trugo','Sharz','Voltrun','Ovolt','WAT','Diğer'];
@@ -1187,6 +1025,8 @@ function setLocStatus(msg){
 
 function $(id){return document.getElementById(id)}function esc(t){return String(t??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
 function loadPos(){try{return JSON.parse(localStorage.getItem('mv_pos')||'null')}catch(e){return null}}function savePos(p){localStorage.setItem('mv_pos',JSON.stringify(p))}
+function distKey(s){const d=s?s.distance:null;return d===null||d===undefined||d===''||!Number.isFinite(Number(d))?Infinity:Number(d)}
+function distText(s){const d=distKey(s);return d===Infinity?'— km':d.toFixed(1)+' km'}
 function km(a,b,c,d){const R=6371,toRad=x=>x*Math.PI/180;const dLat=toRad(c-a),dLon=toRad(d-b);const x=Math.sin(dLat/2)**2+Math.cos(toRad(a))*Math.cos(toRad(c))*Math.sin(dLon/2)**2;return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x))}
 function getJson(k,d){try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(d))}catch(e){return d}}function setJson(k,v){localStorage.setItem(k,JSON.stringify(v))}
 function epdkStations(){return getJson('molavolt_epdk_stations',[])}function setEpdkStations(v){setJson('molavolt_epdk_stations',v||[])}
@@ -1277,15 +1117,15 @@ async function useSponsorCoupon(id,stationId=''){
   const customerLink=`${location.origin}${location.pathname}?coupon=${encodeURIComponent(code)}&action=customer_ok`;
   const msg=`Merhaba, MolaVolt fırsat kodumu kullanmak istiyorum.%0A%0AKod: ${code}%0AFirma: ${encodeURIComponent(o.name||'Sponsor')}%0Aİndirim: ${encodeURIComponent(o.discount||'')}${s?`%0Aİstasyon: ${encodeURIComponent(s.name)}`:''}%0A%0ASatış gerçekleştiyse onay linki:%0A${encodeURIComponent(sponsorLink)}%0A%0AMüşteri kullandı onay linki:%0A${encodeURIComponent(customerLink)}`;
   if(!phone){
-    alert('Fırsat kodun: '+code+'\\nSponsor WhatsApp numarası eklenmemiş. Profil > Fırsat kodlarım bölümünden kullandım onayı verebilirsin.');
+    alert('Fırsat kodun: '+code+'\nSponsor WhatsApp numarası eklenmemiş. Profil > Fırsat kodlarım bölümünden kullandım onayı verebilirsin.');
     return;
   }
-  alert('Fırsat kodun oluşturuldu: '+code+'\\nWhatsApp mesajı açılıyor. Sonra Profil > Fırsat kodlarım bölümünden kullandım onayı verebilirsin.');
+  alert('Fırsat kodun oluşturuldu: '+code+'\nWhatsApp mesajı açılıyor. Sonra Profil > Fırsat kodlarım bölümünden kullandım onayı verebilirsin.');
   window.open(`https://wa.me/${phone}?text=${msg}`,'_blank','noopener');
 }
 
 function routeUrl(s){return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(s.lat+','+s.lon)}&travelmode=driving`}
-function normBrand(v){const raw=String(v||'').trim();if(!raw)return'Diğer';const t=raw.toLocaleLowerCase('tr-TR');if(t.includes('zes')||t.includes('zorlu'))return'ZES';if(t.includes('eşarj')||t.includes('esarj'))return'Eşarj';if(t.includes('trugo')||t.includes('togg'))return'Trugo';if(t.includes('sharz'))return'Sharz.net';if(t.includes('voltrun'))return'Voltrun';if(t.includes('ovolt'))return'Ovolt';if(t.includes('wat'))return'WAT Mobilite';if(t.includes('astor'))return'Astor';if(t.includes('en yakıt')||t.includes('enyakit'))return'En Yakıt';if(t.includes('otopritz')||t.includes('otopriz'))return'Otopriz';if(t.includes('oncharge'))return'Oncharge';if(t.includes('aks[aâ]')||t.includes('aksa'))return'Aksa Şarj';if(t.includes('360°')||t.includes('360 enerji'))return'360° Enerji';if(t.includes('e-power')||t.includes('epower'))return'E-Power';if(t.includes('myz'))return'MYZCO';if(t.includes('q charge'))return'Q Charge';if(t.includes('ctg'))return'CTG Elektrik';if(t.includes('sepaş')||t.includes('sepas'))return'Sepaş';if(t.includes('tesla'))return'Tesla';if(t.includes('petrol ofisi'))return'Petrol Ofisi';if(t.includes('shell'))return'Shell Recharge';return raw.replace(/\\s+/g,' ').trim()}
+function normBrand(v){const raw=String(v||'').trim();if(!raw)return'Diğer';const t=raw.toLocaleLowerCase('tr-TR');if(t.includes('zes')||t.includes('zorlu'))return'ZES';if(t.includes('eşarj')||t.includes('esarj'))return'Eşarj';if(t.includes('trugo')||t.includes('togg'))return'Trugo';if(t.includes('sharz'))return'Sharz.net';if(t.includes('voltrun'))return'Voltrun';if(t.includes('ovolt'))return'Ovolt';if(/(^|[^a-z])wat([^a-z]|$)/.test(t))return'WAT Mobilite';if(t.includes('astor'))return'Astor';if(t.includes('en yakıt')||t.includes('enyakit'))return'En Yakıt';if(t.includes('otopritz')||t.includes('otopriz'))return'Otopriz';if(t.includes('oncharge'))return'Oncharge';if(t.includes('aksâ')||t.includes('aksa'))return'Aksa Şarj';if(t.includes('360°')||t.includes('360 enerji'))return'360° Enerji';if(t.includes('e-power')||t.includes('epower'))return'E-Power';if(t.includes('myz'))return'MYZCO';if(t.includes('q charge'))return'Q Charge';if(t.includes('ctg'))return'CTG Elektrik';if(t.includes('sepaş')||t.includes('sepas'))return'Sepaş';if(t.includes('tesla'))return'Tesla';if(t.includes('petrol ofisi'))return'Petrol Ofisi';if(t.includes('shell'))return'Shell Recharge';return raw.replace(/\s+/g,' ').trim()}
 function toNum(v){if(typeof v==='number')return v;const m=String(v??'').replace(',','.').match(/-?\d+(\.\d+)?/);return m?parseFloat(m[0]):NaN}
 function pick(o,keys){for(const k of keys){if(o&&o[k]!==undefined&&o[k]!==null&&String(o[k]).trim()!=='')return o[k]}return''}
 function rowObject(row,cols){if(!Array.isArray(row))return row||{};const o={};(cols||[]).forEach((c,i)=>o[c]=row[i]);return o}
@@ -1293,11 +1133,11 @@ function parseMaybe(v){if(typeof v!=='string')return v;const t=v.trim();if(!t)re
 function socketSummary(soketler){let sockets='Soket bilgisi EPDK verisinde',power='kW bilgisi EPDK verisinde';try{soketler=parseMaybe(soketler);const arr=Array.isArray(soketler)?soketler:(soketler?[soketler]:[]);const sv=[],pv=[];arr.forEach(x=>{x=parseMaybe(x);if(!x)return;const st=pick(x,['soketTipi','soketTuru','socketType','connectorType','tip']);const pw=pick(x,['soketGucu','guc','kw','power']);if(st)sv.push(String(st));if(pw)pv.push(String(pw).includes('kW')?String(pw):String(pw)+' kW')});if(sv.length)sockets=[...new Set(sv)].join(' / ');if(pv.length)power=[...new Set(pv)].join(' / ')}catch(e){}return{sockets,power}}
 function normalizeEpdkData(data){data=parseMaybe(data);let rows=[];const cols=data&&Array.isArray(data.columnNames)?data.columnNames:[];if(data&&typeof data.result==='string')data={...data,result:parseMaybe(data.result)};if(Array.isArray(data))rows=data;else if(data&&Array.isArray(data.result))rows=data.result.map(r=>rowObject(parseMaybe(r),cols));else if(data&&data.result&&typeof data.result==='object')rows=[data.result];else if(data&&data.data){const d=parseMaybe(data.data);if(Array.isArray(d))rows=d;else if(d&&Array.isArray(d.result))rows=d.result.map(r=>rowObject(parseMaybe(r),cols))}const out=[];rows.forEach((raw,idx)=>{raw=parseMaybe(raw);const r=rowObject(raw,cols);const lat=toNum(pick(r,['enlem','lat','latitude','koordinatx','koordinatX']));const lon=toNum(pick(r,['boylam','lon','lng','longitude','koordinaty','koordinatY']));if(!isFinite(lat)||!isFinite(lon))return;const sok=socketSummary(r.soketler);const name=pick(r,['sarjIstasyonuAdi','istasyonAdi','ad','name'])||'EPDK Şarj İstasyonu';const op=pick(r,['marka','sarjAgiIsletmecisiUnvan','sarjIstasyonuIsletmecisi','isletmeciUnvan'])||'Diğer';const address=pick(r,['adres','address'])||'Adres bilgisi yok';const no=pick(r,['sarjIstasyonuNo','istasyonNo','id'])||(idx+'-'+lat.toFixed(5)+'-'+lon.toFixed(5));out.push({id:'epdk-'+String(no).replace(/[^a-zA-Z0-9_.-]/g,'-')+'-'+idx,name:String(name),brand:normBrand(String(op)+' '+String(name)),type:pick(r,['hizmetSekli'])||'Şarj',status:'Açık',address:String(address),lat,lon,distance:km(userPos.lat,userPos.lon,lat,lon),sockets:sok.sockets,power:sok.power,source:'EPDK'})});const seen=new Set();return out.filter(s=>{const key=s.name+'|'+s.lat.toFixed(5)+'|'+s.lon.toFixed(5);if(seen.has(key))return false;seen.add(key);return true})}
 function clearLegacy(){clearLegacySilent();alert('Eski kayıtlar temizlendi.')}function clearLegacySilent(){LEGACY_KEYS.forEach(k=>localStorage.removeItem(k));Object.keys(localStorage).filter(k=>k.startsWith('molavolt_osm')).forEach(k=>localStorage.removeItem(k))}
-function buildStations(){stations=epdkStations().map(s=>({...s,distance:km(userPos.lat,userPos.lon,s.lat,s.lon)})).sort((a,b)=>a.distance-b.distance)}
+function buildStations(){stations=epdkStations().map(s=>({...s,distance:km(userPos.lat,userPos.lon,s.lat,s.lon)})).sort((a,b)=>distKey(a)-distKey(b)||0)}
 function applyFilters(){
   const q=($('searchInput')?.value||'').trim().toLowerCase();
   filtered=stations.filter(s=>(currentBrand==='Tümü'||s.brand===currentBrand)&&(!q||String(s.name+s.brand+s.address+s.sockets+s.power).toLowerCase().includes(q)));
-  filtered.sort((a,b)=>sortMode==='name'?a.name.localeCompare(b.name,'tr'):(a.distance||0)-(b.distance||0));
+  filtered.sort((a,b)=>sortMode==='name'?a.name.localeCompare(b.name,'tr'):(distKey(a)-distKey(b)||0));
   homeLimit=40;
   stationLimit=80;
   renderAll();
@@ -1324,7 +1164,7 @@ function stationCard(s){
         <p>${esc(s.address)}</p>
       </div>
       <div style="text-align:right">
-        <b>${Number(s.distance||0).toFixed(1)} km</b>
+        <b>${distText(s)}</b>
         <p>${esc(s.sockets)}</p>
       </div>
     </div>
@@ -1433,7 +1273,7 @@ function openDetail(id){
     <button class="routeBtn couponBtn" onclick="useSponsorCoupon('${esc(o.id)}','${esc(s.id)}')">Fırsat kodu al</button>
     <div class="smallInfo">Kod WhatsApp üzerinden sponsor firmaya iletilir.</div>
   </div>`).join(''):'<div class="empty">Bu istasyonda fırsat yok.</div>';
-  $('detailContent').innerHTML=`<h2>${esc(s.name)}</h2><p class="muted">${esc(s.address)}</p><div class="tags"><span class="tag g">${esc(s.brand)}</span><span class="tag b">${Number(s.distance||0).toFixed(1)} km</span><span class="tag">${esc(s.sockets)}</span><span class="tag y">${esc(s.power)}</span></div><br><div class="cardActions"><button class="mapShowBtn" onclick="openStationMap('${esc(s.id)}',event)">Haritada gör</button><a class="routeBtn" href="${routeUrl(s)}" target="_blank" rel="noopener">Yol tarifi al</a></div><div style="margin-top:16px"><h3>Fırsatlar</h3>${offerHtml}</div>`;
+  $('detailContent').innerHTML=`<h2>${esc(s.name)}</h2><p class="muted">${esc(s.address)}</p><div class="tags"><span class="tag g">${esc(s.brand)}</span><span class="tag b">${distText(s)}</span><span class="tag">${esc(s.sockets)}</span><span class="tag y">${esc(s.power)}</span></div><br><div class="cardActions"><button class="mapShowBtn" onclick="openStationMap('${esc(s.id)}',event)">Haritada gör</button><a class="routeBtn" href="${routeUrl(s)}" target="_blank" rel="noopener">Yol tarifi al</a></div><div style="margin-top:16px"><h3>Fırsatlar</h3>${offerHtml}</div>`;
   openModal('detailModal');
 }
 /* MV_GOOGLE_STATION_MODAL_1008 */
@@ -5161,6 +5001,7 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
     for(var i=0;i<map.length;i++){if(b.includes(map[i][0]))return dc?map[i][2]:map[i][1];}
     return NaN;
   }
+  window.mvTariffFallback=tariffFallback;
 
   var oldCard=stationCard;
   stationCard=function(s){
@@ -5503,18 +5344,49 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
     if(counts.busy>0)return {key:'busy',label:'Kısmen dolu',counts:counts};
     return {key:'unknown',label:'Müsaitlik bilinmiyor',counts:counts};
   }
+  function isTrustedSource(src){return src==='socket-count'||src==='socket-status';}
+  // EPDK can list one row per charge unit; sum their sockets instead of keeping only the last row.
+  function combineAvailability(list){
+    var trusted=list.filter(function(a){return a&&isTrustedSource(a.source)});
+    if(!trusted.length)return list[list.length-1];
+    if(trusted.length===1)return trusted[0];
+    var c={ok:0,busy:0,off:0,total:0};
+    trusted.forEach(function(a){var k=a.counts||{};c.ok+=Number(k.ok)||0;c.busy+=Number(k.busy)||0;c.off+=Number(k.off)||0;c.total+=Number(k.total)||0;});
+    var src=trusted.some(function(a){return a.source==='socket-count'})?'socket-count':'socket-status';
+    if(c.ok>0)return {key:'ok',label:c.total>1?c.ok+'/'+c.total+' müsait':'Müsait',counts:c,source:src};
+    if(c.total&&c.off===c.total)return {key:'off',label:'Arızalı / bakım',counts:c,source:src};
+    return {key:'busy',label:'Müsait soket yok',counts:c,source:src};
+  }
   var oldNormalizeAvailability=normalizeEpdkData;
   normalizeEpdkData=function(data){
-    var list=oldNormalizeAvailability(data)||[], rows=rowsFromAny(data), map=new Map();
+    var list=oldNormalizeAvailability(data)||[], rows=rowsFromAny(data), byStation=new Map(), byPoint=new Map(), now=Date.now();
+    function add(map,key,a){if(!map.has(key))map.set(key,[]);map.get(key).push(a);}
     rows.forEach(function(r){
       var lat=toNum(pick(r,['enlem','lat','latitude','koordinatx','koordinatX'])),lon=toNum(pick(r,['boylam','lon','lng','longitude','koordinaty','koordinatY']));
-      if(Number.isFinite(lat)&&Number.isFinite(lon))map.set(lat.toFixed(5)+'|'+lon.toFixed(5),availabilityFromRaw(r));
+      if(!Number.isFinite(lat)||!Number.isFinite(lon))return;
+      var point=lat.toFixed(5)+'|'+lon.toFixed(5), name=String(pick(r,['sarjIstasyonuAdi','istasyonAdi','ad','name'])||'EPDK Şarj İstasyonu');
+      var a=availabilityFromRaw(r);
+      add(byStation,name+'|'+point,a);add(byPoint,point,a);
     });
     return list.map(function(s){
-      var a=map.get(Number(s.lat).toFixed(5)+'|'+Number(s.lon).toFixed(5))||{key:'unknown',label:'Müsaitlik bilinmiyor',counts:{ok:0,busy:0,off:0,total:0}};
-      return Object.assign({},s,a,{availabilityKey:a.key||'unknown',availabilityLabel:a.label||'Anlık soket bilgisi yok',availabilitySource:a.source||'not-provided'});
+      var point=Number(s.lat).toFixed(5)+'|'+Number(s.lon).toFixed(5);
+      var found=byStation.get(s.name+'|'+point)||byPoint.get(point);
+      var a=found?combineAvailability(found):{key:'unknown',label:'Müsaitlik bilinmiyor',counts:{ok:0,busy:0,off:0,total:0}};
+      var src=a.source||'not-provided';
+      return Object.assign({},s,a,{availabilityKey:a.key||'unknown',availabilityLabel:a.label||'Anlık soket bilgisi yok',availabilitySource:src,availabilityAt:isTrustedSource(src)?now:null});
     });
   };
+  // Live socket state goes stale fast: show it only while recent, refresh after a few minutes.
+  var AVAILABILITY_TTL_MS=15*60*1000, AVAILABILITY_REFRESH_MS=5*60*1000;
+  window.mvAvailabilityTrusted=function(s){
+    return !!s&&isTrustedSource(s.availabilitySource)&&Number(s.availabilityAt)>Date.now()-AVAILABILITY_TTL_MS;
+  };
+  function availabilityNeedsRefresh(list){
+    if(!list.length)return true;
+    var unknown=list.filter(function(s){return s.availabilityKey==='unknown'||!s.availabilityKey}).length;
+    if(unknown>Math.max(10,list.length*0.75))return true;
+    return list.some(function(s){return isTrustedSource(s.availabilitySource)&&!(Number(s.availabilityAt)>Date.now()-AVAILABILITY_REFRESH_MS)});
+  }
 
   function availBadge(s){
     var a=s&&s.availabilityKey?s:{availabilityKey:s&&s.key||'unknown',availabilityLabel:s&&s.label};
@@ -5523,7 +5395,7 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
     return '<span class="availBadge '+key+'">'+icon+' '+esc(label)+'</span>';
   }
   function normalizedAvailability(s){
-    var trusted=s&&(s.availabilitySource==='socket-count'||s.availabilitySource==='socket-status');
+    var trusted=window.mvAvailabilityTrusted(s);
     return {availabilityKey:trusted?(s.availabilityKey||'unknown'):'unknown',availabilityLabel:trusted?(s.availabilityLabel||'Anlık bilgi yok'):'Anlık bilgi yok'};
   }
   function paymentSoon(){openModal('paymentSoonModal')}
@@ -5555,10 +5427,11 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
     var base=stations.filter(function(s){
       var brandOk=currentBrand==='Tümü'||s.brand===currentBrand;
       var textOk=!q||String(s.name+' '+s.brand+' '+s.address+' '+s.sockets+' '+s.power).toLowerCase().includes(q);
-      var av=availabilityFilter==='all'||(availabilityFilter==='ok'&&s.availabilityKey==='ok')||(availabilityFilter==='busy'&&s.availabilityKey==='busy')||(availabilityFilter==='unknown'&&s.availabilityKey==='unknown');
+      var trusted=window.mvAvailabilityTrusted(s);
+      var av=availabilityFilter==='all'||(availabilityFilter==='ok'&&trusted&&s.availabilityKey==='ok')||(availabilityFilter==='busy'&&trusted&&s.availabilityKey==='busy')||(availabilityFilter==='unknown'&&!trusted);
       return brandOk&&textOk&&av;
     });
-    base.sort(function(a,b){return sortMode==='name'?a.name.localeCompare(b.name,'tr'):(a.distance||0)-(b.distance||0)});
+    base.sort(function(a,b){return sortMode==='name'?a.name.localeCompare(b.name,'tr'):(distKey(a)-distKey(b)||0)});
     filtered=base;homeLimit=40;stationLimit=80;renderAll();
   }
   var oldApply=applyFilters;
@@ -5567,7 +5440,7 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
 
   /* MV_TRUSTED_AVAILABILITY_FILTER_1008 */
   function trustedAvailability(s){
-    return s&&(s.availabilitySource==='socket-count'||s.availabilitySource==='socket-status');
+    return window.mvAvailabilityTrusted(s);
   }
   function verifiedAvailability(){
     return (stations||[]).filter(trustedAvailability);
@@ -5633,11 +5506,13 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
   var oldRenderAll=renderAll;
   renderAll=function(){renderAvailabilityFilters();oldRenderAll()};
 
+  var availabilityRefreshing=false;
   async function refreshAvailabilitySilently(){
+    if(availabilityRefreshing)return;
+    availabilityRefreshing=true;
     try{
       var current=epdkStations();
-      var needs=!current.length||current.filter(function(s){return s.availabilityKey==='unknown'||!s.availabilityKey}).length>Math.max(10,current.length*0.75);
-      if(!needs)return;
+      if(!availabilityNeedsRefresh(current))return;
       var res=await fetch(DEFAULT_EPDK_URL,{cache:'no-store'});
       if(!res.ok)return;
       var data=await res.json();
@@ -5649,8 +5524,11 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
         applyFilters();
       }
     }catch(e){console.warn('MolaVolt müsaitlik yenileme:',e)}
+    finally{availabilityRefreshing=false;}
   }
   window.addEventListener('load',function(){setTimeout(function(){renderAvailabilityFilters();applyFilters();refreshAvailabilitySilently()},1200)});
+  document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')refreshAvailabilitySilently();});
+  setInterval(function(){if(document.visibilityState==='visible')refreshAvailabilitySilently();},60*1000);
 })();
 </script>
 <script src="google-maps-config.js"></script>
@@ -5894,11 +5772,11 @@ if('serviceWorker' in navigator && (location.protocol==='https:' || location.hos
       const isBrand=filterBrand==='Tümü'||s.brand===filterBrand;
       const activeAvailability=window.availabilityFilter||'all';
       const isAvailable=activeAvailability==='all'||
-        (activeAvailability==='ok'&&s.availabilityKey==='ok'&&(s.availabilitySource==='socket-count'||s.availabilitySource==='socket-status'))||
-        (activeAvailability==='busy'&&s.availabilityKey==='busy'&&(s.availabilitySource==='socket-count'||s.availabilitySource==='socket-status'))||
-        (activeAvailability==='unknown'&&(!s.availabilityKey||s.availabilityKey==='unknown'||s.availabilityKey==='off'));
+        (activeAvailability==='ok'&&s.availabilityKey==='ok'&&window.mvAvailabilityTrusted(s))||
+        (activeAvailability==='busy'&&s.availabilityKey==='busy'&&window.mvAvailabilityTrusted(s))||
+        (activeAvailability==='unknown'&&(!window.mvAvailabilityTrusted(s)||s.availabilityKey==='off'));
       return isBrand&&matches(s,q)&&isAvailable;
-    }).sort((a,b)=>sortMode==='name'?String(a.name||'').localeCompare(String(b.name||''),'tr'):(Number(a.distance)||0)-(Number(b.distance)||0));
+    }).sort((a,b)=>sortMode==='name'?String(a.name||'').localeCompare(String(b.name||''),'tr'):(distKey(a)-distKey(b)||0));
     homeLimit=30;stationLimit=60;
     renderAll();updateSearchUi();
   }
@@ -5920,5 +5798,150 @@ if('serviceWorker' in navigator && (location.protocol==='https:' || location.hos
 #availabilityFilters{display:flex!important;align-items:stretch}
 #availabilityFilters .availFilter{flex:1!important;min-width:0!important}
 </style>
+
+<style id="mv-ui-pro-1013">
+/* MV_UI_PRO_1013: one consistent card/detail design; filters only where they apply. */
+html,body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+body[data-tab="route"] .mvMainSearch,body[data-tab="route"] .mvSearchMessage,body[data-tab="route"] .mvBrandBar,body[data-tab="route"] #brandChips,body[data-tab="route"] #availabilityFilters,body[data-tab="route"] #mvAvailabilityNotice,
+body[data-tab="profile"] .mvMainSearch,body[data-tab="profile"] .mvSearchMessage,body[data-tab="profile"] .mvBrandBar,body[data-tab="profile"] #brandChips,body[data-tab="profile"] #availabilityFilters,body[data-tab="profile"] #mvAvailabilityNotice,
+body[data-tab="favorites"] .mvBrandBar,body[data-tab="favorites"] #availabilityFilters,body[data-tab="report"] .mvBrandBar,body[data-tab="report"] #availabilityFilters{display:none!important}
+.mvBrandMore{display:none!important}
+.mvCard{position:relative;margin:0 0 12px;padding:16px;border:1px solid var(--line);border-radius:20px;background:linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.025));cursor:pointer;transition:border-color .15s,background .15s}
+.mvCard:active{background:rgba(255,255,255,.07)}
+.mvCard:hover{border-color:rgba(53,239,141,.35)}
+.mvCardHead{display:flex;gap:12px;align-items:flex-start}
+.mvBrandMark{flex:0 0 42px;height:42px;border-radius:13px;display:grid;place-items:center;font-weight:800;font-size:14px;letter-spacing:.3px;color:#fff;background:hsl(var(--h,150) 45% 30%);border:1px solid hsl(var(--h,150) 50% 45% / .55)}
+.mvCardTitle{flex:1;min-width:0}
+.mvCardTitle h4{margin:0;font-size:16px;line-height:1.3;font-weight:750;color:var(--text);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.mvCardTitle p{margin:3px 0 0;font-size:13px;line-height:1.35;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mvCardTitle p b{color:#cfe0f0;font-weight:650}
+.mvDist{flex:0 0 auto;text-align:right;line-height:1.1}
+.mvDist b{display:block;font-size:17px;font-weight:800;color:var(--text)}
+.mvDist small{font-size:11px;color:var(--muted)}
+.mvCardMeta{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.mvPill{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border-radius:999px;font-size:12px;font-weight:650;line-height:1.2;background:rgba(255,255,255,.06);color:#cfe0f0;border:1px solid rgba(255,255,255,.08);white-space:nowrap}
+.mvPill .dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+.mvPill.ok{color:#5ff2a6;background:rgba(53,239,141,.12);border-color:rgba(53,239,141,.3)}
+.mvPill.busy{color:#ffc46b;background:rgba(255,176,59,.12);border-color:rgba(255,176,59,.3)}
+.mvPill.off{color:#ff8b8b;background:rgba(255,99,99,.12);border-color:rgba(255,99,99,.3)}
+.mvPill.none{color:var(--muted);font-weight:550}
+.mvCardFoot{display:flex;align-items:center;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.mvPrice{font-size:15px;font-weight:800;color:var(--text);white-space:nowrap}
+.mvPrice small{display:block;font-size:11px;font-weight:550;color:var(--muted)}
+.mvOffer{font-size:12px;font-weight:700;color:var(--yellow);white-space:nowrap}
+.mvCardActions{display:flex;gap:8px;margin-left:auto}
+.mvBtn{display:inline-flex;align-items:center;justify-content:center;min-height:38px;padding:0 14px;border-radius:12px;font-size:13px;font-weight:750;text-decoration:none;cursor:pointer;border:1px solid transparent;font-family:inherit;white-space:nowrap}
+.mvBtn.primary{background:var(--green);color:#04120b}
+.mvBtn.ghost{background:rgba(255,255,255,.06);color:var(--text);border-color:rgba(255,255,255,.14)}
+.mvBtn.block{flex:1;min-height:48px;font-size:15px;border-radius:14px}
+.mvDetail h2{margin:0;font-size:21px;line-height:1.25;padding-right:44px}
+.mvDetail .mvCardHead{margin-bottom:16px}
+.mvDetail .mvCardTitle p{white-space:normal}
+.mvStatus{display:flex;gap:12px;align-items:center;padding:14px;border-radius:16px;border:1px solid var(--line);background:rgba(255,255,255,.04)}
+.mvStatus .big{font-size:22px;line-height:1}
+.mvStatus b{display:block;font-size:15px}
+.mvStatus small{display:block;margin-top:3px;font-size:12px;color:var(--muted)}
+.mvStatus.ok{border-color:rgba(53,239,141,.35);background:rgba(53,239,141,.08)}.mvStatus.ok .big{color:#5ff2a6}
+.mvStatus.busy{border-color:rgba(255,176,59,.35);background:rgba(255,176,59,.08)}.mvStatus.busy .big{color:#ffc46b}
+.mvStatus.off{border-color:rgba(255,99,99,.35);background:rgba(255,99,99,.08)}.mvStatus.off .big{color:#ff8b8b}
+.mvSockets{display:flex;gap:4px;margin-top:8px}
+.mvSockets i{flex:1;height:6px;border-radius:3px;background:rgba(255,255,255,.12)}
+.mvSockets i.ok{background:#35ef8d}.mvSockets i.busy{background:#ffb03b}.mvSockets i.off{background:#ff6363}
+.mvInfoGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.mvInfoGrid div{padding:11px 12px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);min-width:0}
+.mvInfoGrid span{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.mvInfoGrid b{display:block;margin-top:4px;font-size:14px;font-weight:700;overflow-wrap:anywhere}
+.mvSheetActions{display:flex;gap:8px;margin-top:14px}
+.mvSoon{display:flex;align-items:center;gap:10px;margin-top:12px;padding:11px 12px;border-radius:14px;border:1px dashed rgba(255,255,255,.16);font-size:12px;color:var(--muted)}
+.mvSoon b{color:var(--text);font-size:13px}
+.mvSectionTitle{margin:20px 0 10px;font-size:16px}
+.mvOfferCard{display:flex;gap:12px;align-items:center;padding:12px;border-radius:16px;border:1px solid rgba(255,224,129,.22);background:rgba(255,224,129,.05);margin-bottom:8px}
+.mvOfferCard .gift{flex:0 0 44px;width:44px;height:44px;border-radius:12px;font-size:22px}
+.mvOfferCard h4{margin:0;font-size:14px}
+.mvOfferCard p{margin:3px 0 0;font-size:12px;color:var(--muted)}
+.mvOfferCard .mvBtn{margin-left:auto}
+@media(max-width:360px){.mvCardFoot{flex-wrap:wrap}.mvCardActions{width:100%;margin-left:0}.mvCardActions .mvBtn{flex:1}}
+</style>
+<script id="mv-ui-pro-js-1013">
+(function(){
+  function e(v){return esc(String(v??''))}
+  function brandHue(b){let h=0;for(const ch of String(b||''))h=(h*31+ch.charCodeAt(0))%360;return h}
+  function brandMark(b){const w=String(b||'?').replace(/[^A-Za-zÇĞİÖŞÜçğıöşü0-9 ]/g,'').trim().split(/\s+/);return (w.length>1?w[0][0]+w[1][0]:w[0].slice(0,2)).toLocaleUpperCase('tr-TR')||'⚡'}
+  // The API prefixes names with the operator's legal title ("Eşarj Elektrik A.Ş. · Otogar"); the brand is shown separately.
+  function displayName(s){const n=String(s.name||'Şarj istasyonu'),i=n.indexOf(' · ');return i>0?n.slice(i+3):n}
+  function maxKw(s){const m=String(s.power||'').match(/\d+(?:[.,]\d+)?(?=\s*kW)/gi)||[];const v=m.map(x=>Number(x.replace(',','.'))).filter(Number.isFinite);return v.length?Math.max(...v):NaN}
+  function socketText(s){const t=String(s.sockets||'');return /EPDK verisinde|bilgisi yok/i.test(t)?'':t.split(/\s*\/\s*/).filter(Boolean).join(' · ')}
+  function priceOf(s){let p=Number(s.price),est=false;if(!Number.isFinite(p)&&window.mvTariffFallback){p=window.mvTariffFallback(s);est=Number.isFinite(p)}return Number.isFinite(p)?{text:p.toFixed(2).replace('.',',')+' TL/kWh',est}:null}
+  function availability(s){
+    if(!window.mvAvailabilityTrusted||!window.mvAvailabilityTrusted(s))return {key:'none',label:'Canlı durum yok'};
+    const k=s.availabilityKey,label=k==='busy'&&s.availabilityLabel==='Müsait soket yok'?'Dolu':(s.availabilityLabel||'');
+    return {key:k==='ok'||k==='busy'||k==='off'?k:'none',label:label||'Canlı durum yok',counts:s.counts||{}};
+  }
+  function ago(ts){const m=Math.round((Date.now()-Number(ts))/60000);return m<1?'az önce':m+' dk önce'}
+  function kwText(s){const kw=maxKw(s);return Number.isFinite(kw)?kw+' kW'+(kw>=50?' DC':' AC'):''}
+
+  stationCard=function(s){
+    const a=availability(s),kw=kwText(s),sock=socketText(s),price=priceOf(s),offers=typeof offerCount==='function'?offerCount(s.id):0,id=e(s.id);
+    return `<article class="mvCard" onclick="openDetail('${id}')">
+      <div class="mvCardHead">
+        <span class="mvBrandMark" style="--h:${brandHue(s.brand)}" aria-hidden="true">${e(brandMark(s.brand))}</span>
+        <div class="mvCardTitle"><h4>${e(displayName(s))}</h4><p><b>${e(s.brand||'Diğer')}</b> · ${e(s.address||'Adres bilgisi yok')}</p></div>
+        <div class="mvDist"><b>${e(distText(s).replace(' km',''))}</b><small>km</small></div>
+      </div>
+      <div class="mvCardMeta">
+        <span class="mvPill ${a.key}">${a.key==='none'?'':'<span class="dot"></span>'}${e(a.label)}</span>
+        ${kw?`<span class="mvPill">⚡ ${e(kw)}</span>`:''}
+        ${sock?`<span class="mvPill">${e(sock)}</span>`:''}
+      </div>
+      <div class="mvCardFoot">
+        ${price?`<span class="mvPrice">${e(price.text)}${price.est?'<small>tahmini tarife</small>':''}</span>`:'<span class="mvPrice"><small>Fiyat bilgisi yok</small></span>'}
+        ${offers?`<span class="mvOffer">🎁 ${offers} fırsat</span>`:''}
+        <div class="mvCardActions">
+          <button type="button" class="mvBtn ghost" onclick="openStationMap('${id}',event)">Harita</button>
+          <a class="mvBtn primary" href="${e(routeUrl(s))}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Yol tarifi</a>
+        </div>
+      </div>
+    </article>`;
+  };
+
+  openDetail=function(id){
+    const s=stations.find(x=>x.id===id),box=$('detailContent');
+    if(!s||!box)return;
+    const a=availability(s),kw=kwText(s),sock=socketText(s),price=priceOf(s),c=a.counts||{};
+    const total=Number(c.total)||0,bars=total>0&&total<=12?'<div class="mvSockets">'+['ok','busy','off'].flatMap(k=>Array(Math.max(0,Number(c[k])||0)).fill(`<i class="${k}"></i>`)).concat(Array(Math.max(0,total-(Number(c.ok)||0)-(Number(c.busy)||0)-(Number(c.off)||0))).fill('<i></i>')).join('')+'</div>':'';
+    const status=a.key==='none'
+      ?`<div class="mvStatus"><span class="big">•</span><div><b>Canlı soket durumu yok</b><small>Bu istasyonun operatörü anlık boş/dolu bilgisi paylaşmıyor.</small></div></div>`
+      :`<div class="mvStatus ${a.key}"><span class="big">●</span><div style="flex:1"><b>${e(a.label)}</b><small>Güncellendi: ${ago(s.availabilityAt)}</small>${bars}</div></div>`;
+    const off=typeof stationOffers==='function'?fairSponsors(stationOffers(id),id):[];
+    const offerHtml=off.map(o=>`<div class="mvOfferCard">${typeof sponsorLogoHtml==='function'?sponsorLogoHtml(o):'<div class="gift">🎁</div>'}<div><h4>${e(o.name)} <span class="tag g">${e(o.discount)}</span></h4><p>${e(o.offer)}</p></div><button class="mvBtn primary" onclick="useSponsorCoupon('${e(o.id)}','${e(s.id)}')">Kodu al</button></div>`).join('');
+    box.innerHTML=`<div class="mvDetail">
+      <div class="mvCardHead">
+        <span class="mvBrandMark" style="--h:${brandHue(s.brand)}" aria-hidden="true">${e(brandMark(s.brand))}</span>
+        <div class="mvCardTitle"><h2>${e(displayName(s))}</h2><p><b>${e(s.operator||s.brand||'Diğer')}</b><br>${e(s.address||'Adres bilgisi yok')}</p></div>
+      </div>
+      ${status}
+      <div class="mvInfoGrid">
+        <div><span>Mesafe</span><b>${e(distText(s))}</b></div>
+        <div><span>Maks. güç</span><b>${e(kw||'Bilinmiyor')}</b></div>
+        <div><span>Soketler</span><b>${e(sock||'Bilinmiyor')}</b></div>
+        <div><span>Fiyat</span><b>${price?e(price.text)+(price.est?' <small style="color:var(--muted);font-weight:500">(tahmini)</small>':''):'Bilinmiyor'}</b></div>
+      </div>
+      <div class="mvSheetActions">
+        <a class="mvBtn primary block" href="${e(routeUrl(s))}" target="_blank" rel="noopener">Yol tarifi al</a>
+        <button type="button" class="mvBtn ghost block" onclick="openStationMap('${e(s.id)}',event)">Haritada gör</button>
+      </div>
+      <div class="mvSoon">⚡<div><b>MolaVolt ile şarj başlatma</b><br>Operatör bağlantıları tamamlanınca bu ekrandan ödeme yapabileceksin.</div></div>
+      ${offerHtml?`<h3 class="mvSectionTitle">Şarj molası fırsatları</h3>${offerHtml}`:''}
+    </div>`;
+    openModal('detailModal');
+  };
+
+  const baseShowTab=showTab;
+  showTab=function(name){baseShowTab(name);document.body.dataset.tab=name;};
+  window.showTab=showTab;
+  document.body.dataset.tab=typeof activeCustomerTab==='string'&&activeCustomerTab?activeCustomerTab:'home';
+  if(typeof renderCards==='function')try{renderCards()}catch(err){console.warn(err)}
+})();
+</script>
 </body>
 </html>
