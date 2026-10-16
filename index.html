@@ -6464,9 +6464,14 @@ html[data-theme="light"] .mvReport .st.working{color:#0a7f47}html[data-theme="li
 <script type="module" id="mv-account-module-1016">
 /* MV_ACCOUNT_1016: Google sign-in, favorites sync and station status reports (Firebase Auth + Firestore). */
 import { getApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+import { getAuth, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, browserPopupRedirectResolver, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, collection, addDoc, deleteDoc, query, where, limit, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-const app=getApp(), auth=getAuth(app), db=getFirestore(app);
+const app=getApp(), db=getFirestore(app);
+// Keep the session on the device explicitly; fall back to localStorage where IndexedDB is unavailable.
+let auth;
+try{auth=initializeAuth(app,{persistence:[indexedDBLocalPersistence,browserLocalPersistence],popupRedirectResolver:browserPopupRedirectResolver})}catch(_){auth=getAuth(app)}
+let authReady=false;
+const LAST_USER='molavolt_last_user';
 auth.languageCode='tr';
 const FAV='molavolt_favorites_v1', BRANDS='molavolt_fav_brands_v1';
 const readLocal=k=>{try{const v=JSON.parse(localStorage.getItem(k)||'[]');return Array.isArray(v)?v:[]}catch(_){return []}};
@@ -6477,6 +6482,7 @@ function mergeBrands(a,b){const m=new Map();[...a,...b].forEach(x=>{if(x&&!m.has
 let lastSync=null, saveTimer=null;
 function refreshViews(){try{if(window.mvInvalidateMapFav)window.mvInvalidateMapFav();renderCards();renderFavs();if(window.renderHomeStationMap)setTimeout(window.renderHomeStationMap,50)}catch(_){}}
 function emit(){document.dispatchEvent(new CustomEvent('mv-account',{detail:{user:auth.currentUser,lastSync}}))}
+function rememberUser(u){try{if(u)localStorage.setItem(LAST_USER,JSON.stringify({name:u.displayName||'',email:u.email||'',photo:u.photoURL||''}));else localStorage.removeItem(LAST_USER)}catch(_){}}
 async function pull(user){
   const ref=doc(db,'users',user.uid),snap=await getDoc(ref),cloud=snap.exists()?snap.data():{};
   const favs=mergeFavs(readLocal(FAV),cloud.favorites||[]),brands=mergeBrands(readLocal(BRANDS),cloud.favBrands||[]);
@@ -6499,6 +6505,7 @@ function authMessage(err){
 }
 window.mvAccount={
   get user(){return auth.currentUser},
+  get ready(){return authReady},
   get lastSync(){return lastSync},
   async signIn(){
     const provider=new GoogleAuthProvider();provider.setCustomParameters({prompt:'select_account'});
@@ -6527,7 +6534,7 @@ window.mvAccount={
   async deleteReport(id){await deleteDoc(doc(db,'stationReports',id))}
 };
 getRedirectResult(auth).catch(err=>{const m=authMessage(err);if(m)alert(m)});
-onAuthStateChanged(auth,user=>{emit();if(user)pull(user).catch(err=>console.warn('MolaVolt eşitleme:',err));});
+onAuthStateChanged(auth,user=>{authReady=true;rememberUser(user);emit();if(user)pull(user).catch(err=>console.warn('MolaVolt eşitleme:',err));});
 document.dispatchEvent(new CustomEvent('mv-account-ready'));
 </script>
 <script id="mv-account-ui-1016">
@@ -6538,6 +6545,8 @@ document.dispatchEvent(new CustomEvent('mv-account-ready'));
   function ago(ms){if(!ms)return 'az önce';const m=Math.round((Date.now()-ms)/60000);if(m<1)return 'az önce';if(m<60)return m+' dk önce';const h=Math.round(m/60);if(h<24)return h+' saat önce';return Math.round(h/24)+' gün önce'}
   const tsOf=r=>r.createdAt&&r.createdAt.toMillis?r.createdAt.toMillis():0;
   const acct=()=>window.mvAccount;
+  // If the account service never loads (offline, blocked), stop waiting after 10 s and show the sign-in button.
+  let accountGaveUp=false;setTimeout(()=>{if(!(window.mvAccount&&window.mvAccount.ready)){accountGaveUp=true;renderAccount();renderAdminAuth();}},10000);
   window.mvSignIn=function(){if(!acct()){alert('Hesap servisine şu an ulaşılamıyor. İnternet bağlantını kontrol edip tekrar dene.');return}acct().signIn()};
   window.mvSignOut=function(){if(acct()&&confirm('Çıkış yapılsın mı? Favorilerin bu cihazda kalır.'))acct().signOut()};
 
@@ -6547,6 +6556,12 @@ document.dispatchEvent(new CustomEvent('mv-account-ready'));
     let box=document.getElementById('mvAccountCard');
     if(!box){box=document.createElement('div');box.id='mvAccountCard';box.className='panel';const h=prof.querySelector('h3');prof.insertBefore(box,h&&h.nextSibling?h.nextSibling.nextSibling:prof.firstChild);}
     const u=acct()&&acct().user;
+    // Until Firebase has restored the saved session, do not show the sign-in button (it looked like a sign-out).
+    if(!u&&!(acct()&&acct().ready)&&!accountGaveUp){
+      let last=null;try{last=JSON.parse(localStorage.getItem('molavolt_last_user')||'null')}catch(_){}
+      box.innerHTML=last?`<div class="mvAccount"><div class="mvAvatar">${last.photo?`<img src="${e(last.photo)}" alt="" referrerpolicy="no-referrer">`:e(String(last.name||last.email||'?').trim()[0].toLocaleUpperCase('tr-TR'))}</div><div class="who"><b>${e(last.name||'MolaVolt kullanıcısı')}</b><small>${e(last.email||'')}</small><small>Hesap doğrulanıyor…</small></div></div>`:'<b style="font-size:17px">MolaVolt hesabı</b><p class="muted" style="margin:6px 0 0">Hesap kontrol ediliyor…</p>';
+      return;
+    }
     if(!u){
       box.innerHTML=`<b style="font-size:17px">MolaVolt hesabı</b><ul class="mvPerks"><li>⭐ Favori istasyonların ve markaların tüm cihazlarında</li><li>📣 İstasyonlar için durum bildirimi ve yorum</li></ul><button type="button" class="mvGoogleBtn" onclick="mvSignIn()">${GOOGLE}Google ile giriş yap</button>`;
       return;
@@ -6576,6 +6591,7 @@ document.dispatchEvent(new CustomEvent('mv-account-ready'));
   }
   function reportFormHtml(){
     const u=acct()&&acct().user;
+    if(!u&&!(acct()&&acct().ready)&&!accountGaveUp)return '<div class="mvReportSummary">Hesap kontrol ediliyor…</div>';
     if(!u)return `<button type="button" class="mvGoogleBtn" onclick="mvSignIn()">${GOOGLE}Bildirmek için Google ile giriş yap</button>`;
     return `<div class="mvReportBtns">${Object.entries(STATUS).map(([k,v])=>`<button type="button" data-st="${k}" class="${choice===k?'on':''}">${v[0]}</button>`).join('')}</div><textarea class="mvReportText" id="mvReportText" maxlength="280" placeholder="İsteğe bağlı yorum (ör. 2 numaralı soket çalışmıyor)"></textarea><button type="button" class="mvBtn primary block" style="width:100%;margin-top:8px" id="mvReportSend">Bildirimi gönder</button>`;
   }
@@ -6615,6 +6631,7 @@ document.dispatchEvent(new CustomEvent('mv-account-ready'));
     let bar=document.getElementById('mvAdminAuth');
     if(!bar){bar=document.createElement('div');bar.id='mvAdminAuth';bar.className='mvAdminAuth';page.insertBefore(bar,page.querySelector('.adminTabs'));}
     const u=acct()&&acct().user;
+    if(!u&&!(acct()&&acct().ready)&&!accountGaveUp){bar.textContent='Firebase hesabı kontrol ediliyor…';return;}
     bar.innerHTML=u?`Firebase yazma yetkisi: <b>${e(u.email||'')}</b>${u.email==='ufuk8790@gmail.com'?' ✓':' — bu hesap admin değil; istasyon ve sponsor kaydı reddedilir.'} <button type="button" class="secondaryBtn" onclick="mvSignOut()">Çıkış</button>`:`İstasyon ve sponsor verisini Firebase’e kaydetmek için admin Google hesabıyla giriş yap. <button type="button" class="secondaryBtn" onclick="mvSignIn()">Google ile giriş</button>`;
   }
   function renderAll2(){renderAccount();renderAdminAuth();const sec=document.getElementById('mvReports');if(sec)renderReportsSection();}
