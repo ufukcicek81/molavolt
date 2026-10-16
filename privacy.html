@@ -15,7 +15,7 @@ a{color:#36ef8d}
 <body>
 <main>
 <h1>MolaVolt Gizlilik Politikası</h1>
-<p>Son güncelleme: 01.06.2026</p>
+<p>Son güncelleme: 16.10.2026</p>
 
 <div class="card">
 <p>MolaVolt, elektrikli araç kullanıcılarının yakınındaki şarj istasyonlarını bulmasına, yol tarifi almasına ve sponsor fırsat kodlarını kullanmasına yardımcı olan bir uygulamadır.</p>
@@ -25,6 +25,8 @@ a{color:#36ef8d}
 <ul>
 <li><b>Konum bilgisi:</b> Yakındaki şarj istasyonlarını mesafeye göre sıralamak için kullanılır. Konum izni kullanıcı tarafından verilir.</li>
 <li><b>Fırsat kodu bilgileri:</b> Kullanıcının oluşturduğu fırsat kodu, sponsor firma, istasyon adı, oluşturulma zamanı ve kod durumu Firebase üzerinde saklanabilir.</li>
+<li><b>Hesap bilgileri (isteğe bağlı):</b> Google ile giriş yaparsan adın, e-posta adresin ve profil fotoğrafın Firebase Authentication üzerinden alınır. Favori istasyonların ve favori markaların cihazların arasında eşitlenmek için hesabına bağlı olarak saklanır.</li>
+<li><b>İstasyon bildirimleri:</b> Bir istasyon için "Çalışıyor / Arızalı / Dolu" bildirimi ya da yorum gönderirsen bildirim, yorum metni, gönderim zamanı ve adının kısaltması (ör. "Ufuk Ç.") herkese açık olarak gösterilir. E-posta adresin gösterilmez.</li>
 <li><b>Cihaz kimliği:</b> Kişisel kimlik bilgisi içermeyen yerel cihaz kimliği, fırsat kodlarını takip etmek için kullanılabilir.</li>
 <li><b>WhatsApp yönlendirmesi:</b> Kullanıcı fırsat kodunu sponsor firmaya göndermek istediğinde WhatsApp’a yönlendirilir.</li>
 </ul>
@@ -39,14 +41,16 @@ a{color:#36ef8d}
 
 <h2>Üçüncü taraf hizmetler</h2>
 <ul>
-<li>Google Firebase / Firestore: Uygulama verilerini ve fırsat kodu kayıtlarını saklamak için.</li>
+<li>Google Firebase / Firestore ve Firebase Authentication: Uygulama verilerini, fırsat kodu kayıtlarını, hesap ve bildirim verilerini saklamak ve Google ile girişi sağlamak için.</li>
+<li>Google Maps Platform: Harita, yer arama ve istasyonların anlık soket durumu (varsa) için.</li>
+<li>EPDK açık verisi: Şarj istasyonu listesi için.</li>
 <li>OpenStreetMap / Leaflet: Harita gösterimi için.</li>
 <li>Google Maps: Yol tarifi bağlantısı için.</li>
 <li>WhatsApp: Fırsat kodunu sponsor firmaya iletmek için.</li>
 </ul>
 
 <h2>Veri saklama ve silme talepleri</h2>
-<p>Fırsat kodları ve rapor verileri hizmetin çalışması için Firebase üzerinde saklanabilir. Kullanıcılar destek hattı üzerinden veri silme talebinde bulunabilir.</p>
+<p>Fırsat kodları ve rapor verileri hizmetin çalışması için Firebase üzerinde saklanabilir. Kendi istasyon bildirimlerini uygulamadaki "Sil" düğmesiyle istediğin zaman silebilirsin. Hesabının ve ona bağlı verilerin silinmesi için destek hattı veya e-posta üzerinden talepte bulunabilirsin.</p>
 
 <h2>İletişim</h2>
 <p><b>Web:</b> https://molavolt.com</p>
