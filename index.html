@@ -799,6 +799,25 @@ html.mv-admin-start .adminOnly{
   });
 })();
 </script>
+<script id="mv-diag-1016">
+/* Account diagnostics: start-up timings, Firebase auth/Firestore errors and failed Google API calls.
+   Shown in Profil > "Hesap tanı bilgisi" so problems on a phone can be screenshotted. */
+(function(){
+  var t0=Date.now(),log=[];
+  function add(m){log.push('+'+((Date.now()-t0)/1000).toFixed(1)+'s '+String(m).slice(0,300));if(log.length>60)log.shift();}
+  window.mvDiag=add;window.mvDiagLog=function(){return log.slice()};
+  add('page start '+location.host+' '+(navigator.userAgent.match(/(Chrome|Version)\/[\d.]+/)||[''])[0]+(window.matchMedia&&matchMedia('(display-mode: standalone)').matches?' standalone':''));
+  var f=window.fetch;
+  if(f)window.fetch=function(input){
+    var url=typeof input==='string'?input:(input&&input.url)||'';
+    var watch=/identitytoolkit|securetoken|firestore\.googleapis|firebaseinstallations/.test(url);
+    var p=f.apply(this,arguments);
+    if(watch)p.then(function(r){if(!r.ok)r.clone().text().then(function(t){add('HTTP '+r.status+' '+url.split('?')[0].replace(/^https:\/\//,'')+' '+t.replace(/\s+/g,' ').slice(0,220))}).catch(function(){})},function(e){add('network error '+url.split('?')[0]+' '+e)});
+    return p;
+  };
+  ['warn','error'].forEach(function(k){var o=console[k];console[k]=function(){try{var m=[].map.call(arguments,function(a){return a&&a.message?a.message:String(a)}).join(' ');if(/firebase|firestore|auth\//i.test(m))add(k+': '+m)}catch(_){}return o.apply(console,arguments)}});
+})();
+</script>
 <script id="mv-theme-boot-1016">
 (function(){try{var pref=localStorage.getItem('molavolt_theme')||'system';var dark=pref==='dark'||(pref==='system'&&window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.dataset.theme=dark?'dark':'light';}catch(e){document.documentElement.dataset.theme='dark';}})();
 </script>
@@ -6469,9 +6488,13 @@ import { getFirestore, doc, getDoc, setDoc, collection, addDoc, deleteDoc, query
 const app=getApp(), db=getFirestore(app);
 // Keep the session on the device explicitly; fall back to localStorage where IndexedDB is unavailable.
 let auth;
-try{auth=initializeAuth(app,{persistence:[indexedDBLocalPersistence,browserLocalPersistence],popupRedirectResolver:browserPopupRedirectResolver})}catch(_){auth=getAuth(app)}
+// No popupRedirectResolver here: with it, start-up waits for a hidden molavolt.firebaseapp.com iframe before
+// restoring the session (seconds on phones). The resolver is passed only to the sign-in call.
+try{auth=initializeAuth(app,{persistence:[indexedDBLocalPersistence,browserLocalPersistence]})}catch(_){auth=getAuth(app)}
 let authReady=false;
 const LAST_USER='molavolt_last_user';
+const diag=m=>{try{window.mvDiag&&window.mvDiag(m)}catch(_){}};
+diag('account module loaded');
 auth.languageCode='tr';
 const FAV='molavolt_favorites_v1', BRANDS='molavolt_fav_brands_v1';
 const readLocal=k=>{try{const v=JSON.parse(localStorage.getItem(k)||'[]');return Array.isArray(v)?v:[]}catch(_){return []}};
@@ -6484,11 +6507,12 @@ function refreshViews(){try{if(window.mvInvalidateMapFav)window.mvInvalidateMapF
 function emit(){document.dispatchEvent(new CustomEvent('mv-account',{detail:{user:auth.currentUser,lastSync}}))}
 function rememberUser(u){try{if(u)localStorage.setItem(LAST_USER,JSON.stringify({name:u.displayName||'',email:u.email||'',photo:u.photoURL||''}));else localStorage.removeItem(LAST_USER)}catch(_){}}
 async function pull(user){
+  const t0=performance.now();diag('sync start');
   const ref=doc(db,'users',user.uid),snap=await getDoc(ref),cloud=snap.exists()?snap.data():{};
   const favs=mergeFavs(readLocal(FAV),cloud.favorites||[]),brands=mergeBrands(readLocal(BRANDS),cloud.favBrands||[]);
   writeLocal(FAV,favs);writeLocal(BRANDS,brands);
   await setDoc(ref,{favorites:favs,favBrands:brands,updatedAt:serverTimestamp()},{merge:true});
-  lastSync=Date.now();refreshViews();emit();
+  lastSync=Date.now();diag('sync done in '+Math.round(performance.now()-t0)+' ms');refreshViews();emit();
 }
 window.mvCloudSave=function(){
   const user=auth.currentUser;if(!user)return;
@@ -6509,9 +6533,10 @@ window.mvAccount={
   get lastSync(){return lastSync},
   async signIn(){
     const provider=new GoogleAuthProvider();provider.setCustomParameters({prompt:'select_account'});
-    try{await signInWithPopup(auth,provider)}
+    try{await signInWithPopup(auth,provider,browserPopupRedirectResolver)}
     catch(err){
-      if(['auth/popup-blocked','auth/operation-not-supported-in-this-environment'].includes(err.code)){await signInWithRedirect(auth,provider);return}
+      diag('signIn error '+(err.code||'')+' '+(err.message||''));
+      if(err.code==='auth/popup-blocked'){alert('Giriş penceresi engellendi. Tarayıcıda açılır pencerelere izin verip tekrar dene.');return}
       const m=authMessage(err);if(m)alert(m);
     }
   },
@@ -6533,8 +6558,7 @@ window.mvAccount={
   },
   async deleteReport(id){await deleteDoc(doc(db,'stationReports',id))}
 };
-getRedirectResult(auth).catch(err=>{const m=authMessage(err);if(m)alert(m)});
-onAuthStateChanged(auth,user=>{authReady=true;rememberUser(user);emit();if(user)pull(user).catch(err=>console.warn('MolaVolt eşitleme:',err));});
+onAuthStateChanged(auth,user=>{diag('auth state: '+(user?'signed in ('+(user.email||user.uid)+')':'signed out'));authReady=true;rememberUser(user);emit();if(user)pull(user).catch(err=>{diag('sync error '+(err.code||'')+' '+(err.message||''));console.warn('MolaVolt eşitleme:',err)});},err=>diag('auth observer error '+(err&&err.code||'')+' '+(err&&err.message||'')));
 document.dispatchEvent(new CustomEvent('mv-account-ready'));
 </script>
 <script id="mv-account-ui-1016">
@@ -6634,7 +6658,15 @@ document.dispatchEvent(new CustomEvent('mv-account-ready'));
     if(!u&&!(acct()&&acct().ready)&&!accountGaveUp){bar.textContent='Firebase hesabı kontrol ediliyor…';return;}
     bar.innerHTML=u?`Firebase yazma yetkisi: <b>${e(u.email||'')}</b>${u.email==='ufuk8790@gmail.com'?' ✓':' — bu hesap admin değil; istasyon ve sponsor kaydı reddedilir.'} <button type="button" class="secondaryBtn" onclick="mvSignOut()">Çıkış</button>`:`İstasyon ve sponsor verisini Firebase’e kaydetmek için admin Google hesabıyla giriş yap. <button type="button" class="secondaryBtn" onclick="mvSignIn()">Google ile giriş</button>`;
   }
-  function renderAll2(){renderAccount();renderAdminAuth();const sec=document.getElementById('mvReports');if(sec)renderReportsSection();}
+  // Profile: diagnostics viewer.
+  function renderDiag(){
+    const prof=document.querySelector('#tab-profile .section');if(!prof||document.getElementById('mvDiagBox'))return;
+    const d=document.createElement('details');d.id='mvDiagBox';d.className='panel';
+    d.innerHTML='<summary style="cursor:pointer;font-weight:700">Hesap tanı bilgisi</summary><p class="muted" style="margin:6px 0">Giriş veya eşitleme sorununda bu ekranın görüntüsünü destek ekibine gönder.</p><pre id="mvDiagText" style="white-space:pre-wrap;font-size:11px;line-height:1.45;margin:0;max-height:320px;overflow:auto"></pre>';
+    d.addEventListener('toggle',()=>{const t=document.getElementById('mvDiagText');if(t)t.textContent=(window.mvDiagLog?window.mvDiagLog():[]).join('\n')||'Kayıt yok.'});
+    prof.appendChild(d);
+  }
+  function renderAll2(){renderAccount();renderAdminAuth();renderDiag();const sec=document.getElementById('mvReports');if(sec)renderReportsSection();}
   // Refresh "Bildirimlerim" whenever the profile tab is opened.
   const baseTab=showTab;showTab=function(n){baseTab.apply(this,arguments);if(n==='profile')renderAccount();};window.showTab=showTab;
   document.addEventListener('mv-account',renderAll2);
