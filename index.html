@@ -799,6 +799,33 @@ html.mv-admin-start .adminOnly{
   });
 })();
 </script>
+<script id="mv-epdk-fetch-share-1016">
+/* Several startup loaders each download the full EPDK list (~25 MB). Share one download per 10 minutes
+   per page session; the cache-busting t= parameters are dropped so they all hit the same request. */
+(function(){
+  var nativeFetch=window.fetch;if(!nativeFetch)return;
+  var shared=null,SHARE_MS=10*60*1000;
+  function abortable(p,signal){
+    if(!signal)return p;
+    if(signal.aborted)return Promise.reject(new DOMException('Aborted','AbortError'));
+    return new Promise(function(resolve,reject){
+      signal.addEventListener('abort',function(){reject(new DOMException('Aborted','AbortError'))},{once:true});
+      p.then(resolve,reject);
+    });
+  }
+  window.fetch=function(input,init){
+    var url=typeof input==='string'?input:(input&&input.url)||'';
+    var method=String((init&&init.method)||(input&&input.method)||'GET').toUpperCase();
+    if(method!=='GET'||!/\/api\/epdk(\?|$)/.test(url)||document.body&&document.body.classList.contains('admin-mode'))return nativeFetch.apply(this,arguments);
+    if(!shared||Date.now()-shared.at>SHARE_MS){
+      var clean=url.replace(/([?&])(t|availabilityRefresh)=\d+&?/g,'$1').replace(/[?&]$/,'');
+      var p=nativeFetch.call(window,clean,{cache:'no-store',credentials:'omit'}).then(function(r){if(!r.ok)shared=null;return r},function(e){shared=null;throw e});
+      shared={at:Date.now(),p:p};
+    }
+    return abortable(shared.p.then(function(r){return r.clone()}),init&&init.signal);
+  };
+})();
+</script>
 
  <link rel="manifest" href="manifest.json?v=0607">
   <meta name="theme-color" content="#07111d">
@@ -4978,7 +5005,7 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
         if(!r)return s;
         var op=operatorFromRow(r), p=priceFromObject(r,0);
         var x=Object.assign({},s);
-        if(op){x.operator=op;x.brand=normBrand(op);}
+        var brandRaw=String(pick(r,['marka','markaAdi','tescilliMarka'])||'').trim();if(op)x.operator=op;if(brandRaw||op)x.brand=normBrand(brandRaw||op);
         if(Number.isFinite(p)){x.price=p;x.priceText=p.toFixed(2)+' TL/kWh';}
         return x;
       });
@@ -5382,10 +5409,10 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
   window.mvAvailabilityTrusted=function(s){
     return !!s&&isTrustedSource(s.availabilitySource)&&Number(s.availabilityAt)>Date.now()-AVAILABILITY_TTL_MS;
   };
+  // EPDK's public list carries no live socket state (checked 2026-10: 17k stations, only type/power per socket),
+  // so the full ~25 MB list is re-downloaded only when it actually reported availability that is now stale.
   function availabilityNeedsRefresh(list){
     if(!list.length)return true;
-    var unknown=list.filter(function(s){return s.availabilityKey==='unknown'||!s.availabilityKey}).length;
-    if(unknown>Math.max(10,list.length*0.75))return true;
     return list.some(function(s){return isTrustedSource(s.availabilitySource)&&!(Number(s.availabilityAt)>Date.now()-AVAILABILITY_REFRESH_MS)});
   }
 
@@ -5458,7 +5485,7 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
     el.appendChild(b);
   }
   window.mvExplainAvailability=function(){
-    showAvailabilityNotice('MolaVolt şu anda doğrulanmış canlı soket durumu alamıyor. İstasyonların dolu olduğu anlamına gelmez. ');
+    showAvailabilityNotice('EPDK listesi anlık boş/dolu bilgisi içermiyor. Bir istasyonu açtığında canlı durum, varsa Google Haritalar üzerinden kontrol edilir. ');
   };
   window.mvRefreshAvailabilityNow=async function(){
     var el=$('mvAvailabilityNotice');if(el)showAvailabilityNotice('Anlık soket verisi tekrar kontrol ediliyor… ');
@@ -5892,9 +5919,9 @@ body:not(.admin-mode) .bottomNav.customerOnly{grid-template-columns:repeat(5,min
   // Favorites: unlimited, stored on the device. Station ids change when EPDK data reloads,
   // so a favorite is keyed by name + coordinates and keeps a snapshot for when it is missing from the list.
   const FAV_KEY='molavolt_favorites_v1';
-  function favKey(s){return [String(s.name||''),Number(s.lat).toFixed(5),Number(s.lon).toFixed(5)].join('|')}
+  function favKey(s){return [displayName(s),Number(s.lat).toFixed(5),Number(s.lon).toFixed(5)].join('|')}
   function favId(key){let h=0;for(const ch of key)h=(h*31+ch.charCodeAt(0))>>>0;return 'fav-'+h.toString(36)}
-  function readFavs(){try{const v=JSON.parse(localStorage.getItem(FAV_KEY)||'[]');return Array.isArray(v)?v.filter(f=>f&&f.key):[]}catch(_){return []}}
+  function readFavs(){try{const v=JSON.parse(localStorage.getItem(FAV_KEY)||'[]');return Array.isArray(v)?v.filter(f=>f&&f.key).map(f=>f.station&&f.station.name?Object.assign({},f,{key:favKey(f.station)}):f):[]}catch(_){return []}}
   function writeFavs(list){try{localStorage.setItem(FAV_KEY,JSON.stringify(list));return true}catch(_){return false}}
   function isFav(s){const k=favKey(s);return readFavs().some(f=>f.key===k)}
   function favStations(){
@@ -5931,6 +5958,61 @@ body:not(.admin-mode) .bottomNav.customerOnly{grid-template-columns:repeat(5,min
     box.innerHTML=list.length?list.map(stationCard).join(''):'<div class="mvFavEmpty"><b>☆</b>Henüz favori istasyonun yok.<br>İstasyon kartındaki yıldıza dokunarak istediğin kadar istasyon ekleyebilirsin.</div>';
   };
 
+  // Live connector availability from Google Places (New) evChargeOptions, fetched only for the opened station.
+  const LIVE_TTL_MS=15*60*1000, liveCache=new Map();
+  function sumBy(list,f){return list.reduce((t,a)=>t+(Number(a[f])||0),0)}
+  async function googleLive(s){
+    const key=favKey(s),hit=liveCache.get(key);
+    if(hit&&Date.now()-hit.at<3*60*1000)return hit.data;
+    if(typeof mvGetPlacesLibrary!=='function')return null;
+    const lib=await mvGetPlacesLibrary();
+    if(!lib||!lib.Place||typeof lib.Place.searchNearby!=='function')return null;
+    const lat=Number(s.lat),lng=Number(s.lon);
+    const res=await lib.Place.searchNearby({fields:['displayName','location','evChargeOptions'],locationRestriction:{center:{lat,lng},radius:150},includedTypes:['electric_vehicle_charging_station'],maxResultCount:5,language:'tr',region:'tr'});
+    let best=null,bestD=Infinity;
+    (res&&res.places||[]).forEach(p=>{const l=p.location;if(!l)return;const d=km(lat,lng,typeof l.lat==='function'?l.lat():l.lat,typeof l.lng==='function'?l.lng():l.lng);if(d<bestD){bestD=d;best=p}});
+    let data=null;
+    const ev=best&&bestD<=0.15?best.evChargeOptions:null;
+    const aggs=ev?(ev.connectorAggregations||ev.connectorAggregation||[]):[];
+    const live=aggs.filter(a=>a.availableCount!=null&&a.availabilityLastUpdateTime);
+    if(live.length){
+      const at=Math.max(...live.map(a=>new Date(a.availabilityLastUpdateTime).getTime()).filter(Number.isFinite));
+      const total=sumBy(live,'count'),ok=sumBy(live,'availableCount'),off=sumBy(live,'outOfServiceCount');
+      data={at,counts:{ok,off,busy:Math.max(0,total-ok-off),total}};
+    }
+    liveCache.set(key,{at:Date.now(),data});
+    return data;
+  }
+  function applyLive(s,data){
+    const c=data.counts,key=c.ok>0?'ok':(c.total&&c.off===c.total?'off':'busy');
+    const label=key==='ok'?(c.total>1?c.ok+'/'+c.total+' müsait':'Müsait'):key==='off'?'Arızalı / bakım':'Dolu';
+    // Stamped with Google's own update time, so the usual 15-minute freshness rule applies.
+    Object.assign(s,{availabilityKey:key,availabilityLabel:label,availabilitySource:'socket-count',availabilityAt:data.at,counts:c,availabilityProvider:'google'});
+  }
+  async function refreshDetailLive(s){
+    if(window.mvAvailabilityTrusted&&window.mvAvailabilityTrusted(s))return;
+    const box=document.getElementById('mvLiveStatus');
+    if(box)box.innerHTML='<div class="mvStatus"><span class="big">↻</span><div><b>Canlı durum kontrol ediliyor…</b><small>Google Haritalar şarj noktası verisi</small></div></div>';
+    let data=null;
+    try{data=await googleLive(s)}catch(err){console.warn('MolaVolt Google canlı durum:',err)}
+    const still=document.getElementById('mvLiveStatus');
+    if(!still||still.dataset.station!==s.id)return;
+    if(data&&Date.now()-data.at<LIVE_TTL_MS){
+      [s,(stations||[]).find(x=>x.id===s.id)].forEach(x=>x&&applyLive(x,data));
+      still.outerHTML=statusHtml(s);renderCards();
+    }else{
+      still.outerHTML=statusHtml(s,data?'Google’daki son bilgi '+ago(data.at)+' güncellenmiş; güncel sayılmadı.':'');
+    }
+  }
+  function statusHtml(s,note){
+    const a=availability(s),c=a.counts||{};
+    const total=Number(c.total)||0,bars=total>0&&total<=12?'<div class="mvSockets">'+['ok','busy','off'].flatMap(k=>Array(Math.max(0,Number(c[k])||0)).fill(`<i class="${k}"></i>`)).concat(Array(Math.max(0,total-(Number(c.ok)||0)-(Number(c.busy)||0)-(Number(c.off)||0))).fill('<i></i>')).join('')+'</div>':'';
+    const inner=a.key==='none'
+      ?`<div class="mvStatus"><span class="big">•</span><div><b>Canlı soket durumu yok</b><small>${e(note||'Bu istasyon için operatör veya Google anlık boş/dolu bilgisi paylaşmıyor.')}</small></div></div>`
+      :`<div class="mvStatus ${a.key}"><span class="big">●</span><div style="flex:1"><b>${e(a.label)}</b><small>Güncellendi: ${ago(s.availabilityAt)}${s.availabilityProvider==='google'?' · Google Haritalar':''}</small>${bars}</div></div>`;
+    return `<div id="mvLiveStatus" data-station="${e(s.id)}">${inner}</div>`;
+  }
+
   stationCard=function(s){
     const a=availability(s),kw=kwText(s),sock=socketText(s),price=priceOf(s),offers=typeof offerCount==='function'?offerCount(s.id):0,id=e(s.id);
     return `<article class="mvCard" onclick="openDetail('${id}')">
@@ -5960,11 +6042,8 @@ body:not(.admin-mode) .bottomNav.customerOnly{grid-template-columns:repeat(5,min
   openDetail=function(id){
     const s=stations.find(x=>x.id===id)||favStations().find(x=>x.id===id),box=$('detailContent');
     if(!s||!box)return;
-    const a=availability(s),kw=kwText(s),sock=socketText(s),price=priceOf(s),c=a.counts||{};
-    const total=Number(c.total)||0,bars=total>0&&total<=12?'<div class="mvSockets">'+['ok','busy','off'].flatMap(k=>Array(Math.max(0,Number(c[k])||0)).fill(`<i class="${k}"></i>`)).concat(Array(Math.max(0,total-(Number(c.ok)||0)-(Number(c.busy)||0)-(Number(c.off)||0))).fill('<i></i>')).join('')+'</div>':'';
-    const status=a.key==='none'
-      ?`<div class="mvStatus"><span class="big">•</span><div><b>Canlı soket durumu yok</b><small>Bu istasyonun operatörü anlık boş/dolu bilgisi paylaşmıyor.</small></div></div>`
-      :`<div class="mvStatus ${a.key}"><span class="big">●</span><div style="flex:1"><b>${e(a.label)}</b><small>Güncellendi: ${ago(s.availabilityAt)}</small>${bars}</div></div>`;
+    const kw=kwText(s),sock=socketText(s),price=priceOf(s);
+    const status=statusHtml(s);
     const off=typeof stationOffers==='function'?fairSponsors(stationOffers(id),id):[];
     const offerHtml=off.map(o=>`<div class="mvOfferCard">${typeof sponsorLogoHtml==='function'?sponsorLogoHtml(o):'<div class="gift">🎁</div>'}<div><h4>${e(o.name)} <span class="tag g">${e(o.discount)}</span></h4><p>${e(o.offer)}</p></div><button class="mvBtn primary" onclick="useSponsorCoupon('${e(o.id)}','${e(s.id)}')">Kodu al</button></div>`).join('');
     box.innerHTML=`<div class="mvDetail">
@@ -5988,6 +6067,7 @@ body:not(.admin-mode) .bottomNav.customerOnly{grid-template-columns:repeat(5,min
       ${offerHtml?`<h3 class="mvSectionTitle">Şarj molası fırsatları</h3>${offerHtml}`:''}
     </div>`;
     openModal('detailModal');
+    refreshDetailLive(s);
   };
 
   const baseShowTab=showTab;

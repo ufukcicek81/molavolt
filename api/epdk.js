@@ -114,11 +114,10 @@ export default async function handler(req, res) {
   function addPriceToPower(p,price){const base=String(p??"").trim();if(!Number.isFinite(price))return base;const priceText=`${price.toFixed(2)} TL/kWh`;if(base&&/TL\s*\/\s*kWh/i.test(base))return base;return base?`${base} · ${priceText}`:priceText}
   function enrichRow(raw,cols){
     const r=rowObject(raw,cols);
-    const brand=firstValue(r,["sarjAgiIsletmecisiUnvan","sarjAgiIsletmecisi","isletmeciUnvan","isletmeci","operatorName","operator","company","markaAdi","marka","tescilliMarka","markaAd","sarjAgiMarka","sarjAgiIsletmecisiMarka","saglayiciMarka","operatorMarka","sarjIstasyonuIsletmecisiUnvan","sarjIstasyonuIsletmecisi","hizmetSaglayici","hizmetSaglayiciAdi"]);
-    const brandText=String(brand||"").trim();
-    if(brandText){r.marka=brandText;r.markaAdi=brandText;r.sarjAgiMarka=brandText;r.operator=brandText;r.operatorName=brandText;}
-    const stationName=firstValue(r,["sarjIstasyonuAdi","istasyonAdi","istasyonAd","ad","name","stationName"]);
-    if(brandText&&stationName&&!String(stationName).toLowerCase().startsWith(brandText.toLowerCase()))r.sarjIstasyonuAdi=`${brandText} · ${stationName}`;
+    // EPDK "marka" is the consumer brand (ZES, Eşarj, MULTI FORCE...); sarjAgiIsletmecisiUnvan is the legal company title.
+    // Keep both as published instead of overwriting the brand or prefixing station names with the legal title.
+    const operatorTitle=String(firstValue(r,["sarjAgiIsletmecisiUnvan","sarjAgiIsletmecisi","sarjIstasyonuIsletmecisi","isletmeciUnvan","isletmeci","operatorName","operator","company"])||"").trim();
+    if(operatorTitle){if(!r.operator)r.operator=operatorTitle;if(!r.operatorName)r.operatorName=operatorTitle;}
     const availability=availabilitySummary(r);
     r.molavoltAvailability=availability;
     r.availabilityKey=availability.key;
