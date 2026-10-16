@@ -56,11 +56,12 @@ dependencies {
     implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.7.3'
 }
 
-// Use the existing MolaVolt logo at the repository root: no placeholder app icon.
+// Use the MolaVolt logo files at the repository root: no placeholder app icon.
 def generateMolaVoltIcon = tasks.register('generateMolaVoltIcon', Copy) {
-    from(rootProject.file('../icon-192.png'))
+    from(rootProject.file('../icon-512.png')) { rename { String ignored -> 'ic_launcher.png' } }
+    // Splash shows the bare logo mark on the splash background, not the icon tile inside a box.
+    from(rootProject.file('../splash-logo.png')) { rename { String ignored -> 'splash_logo.png' } }
     into(layout.buildDirectory.dir('generated/brand-res/drawable-nodpi'))
-    rename { String ignored -> 'ic_launcher.png' }
 }
 // Generated resources are consumed by several AGP tasks; explicitly wire each consumer.
 tasks.matching { task ->

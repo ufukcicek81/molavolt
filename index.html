@@ -799,6 +799,9 @@ html.mv-admin-start .adminOnly{
   });
 })();
 </script>
+<script id="mv-theme-boot-1016">
+(function(){try{var pref=localStorage.getItem('molavolt_theme')||'system';var dark=pref==='dark'||(pref==='system'&&window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.dataset.theme=dark?'dark':'light';}catch(e){document.documentElement.dataset.theme='dark';}})();
+</script>
 <script id="mv-epdk-fetch-share-1016">
 /* Several startup loaders each download the full EPDK list (~25 MB). Share one download per 10 minutes
    per page session; the cache-busting t= parameters are dropped so they all hit the same request. */
@@ -827,15 +830,16 @@ html.mv-admin-start .adminOnly{
 })();
 </script>
 
- <link rel="manifest" href="manifest.json?v=0607">
+ <link rel="manifest" href="manifest.json?v=1016">
   <meta name="theme-color" content="#07111d">
-  <link rel="apple-touch-icon" href="icon-192.png?v=0607">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png?v=1016">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=1016">
 </head>
 <body>
 <div id="routeToast" class="routeToast">Rota oluşturuluyor…</div>
 <div class="app">
   <div class="top">
-    <div class="brand"><div class="logo"><img src="logo.png?v=0607" onerror="this.onerror=null;this.src='icon-192.png?v=0607';this.onerror=()=>{this.style.display='none';this.parentNode.innerHTML='<span class=bolt>⚡</span>'}"></div><div><h1>Mola<span class="green">Volt</span></h1><p id="subTitle">Yakındaki şarj istasyonları</p></div></div>
+    <div class="brand"><div class="logo"><img src="logo-mark.png?v=1016" alt="MolaVolt" width="40" height="54" onerror="this.onerror=null;this.style.display='none';this.parentNode.innerHTML='<span class=bolt>⚡</span>'"></div><div><h1>Mola<span class="green">Volt</span></h1><p id="subTitle">Yakındaki şarj istasyonları</p></div></div>
     <button class="iconBtn customerOnly" onclick="hardRefresh()">↻</button>
     <button class="iconBtn adminOnly" onclick="renderAdmin()">↻</button>
   </div>
@@ -6220,6 +6224,120 @@ body:not(.admin-mode) .bottomNav.customerOnly{grid-template-columns:repeat(5,min
     };
   }
   try{buildStations();if(typeof renderChips==='function')renderChips();if(typeof applyFilters==='function')applyFilters();renderFavs();}catch(err){console.warn(err)}
+})();
+</script>
+
+<style id="mv-theme-1016">
+/* MV_THEME_1016: light / dark themes and a livelier brand accent. */
+:root{--accent:#2ff08f;--accent2:#22d3ee;--accentGrad:linear-gradient(135deg,#2ff08f 0%,#22d3ee 100%);--surface:#0f1d2e;--surface2:#13253a;--onAccent:#03140b}
+html[data-theme="dark"] body{background:radial-gradient(1200px 500px at 10% -10%,rgba(47,240,143,.16),transparent 60%),radial-gradient(900px 500px at 110% 0%,rgba(34,211,238,.14),transparent 55%),linear-gradient(180deg,#06101b,#081522 60%,#06101b)!important;background-attachment:fixed!important}
+.top h1{letter-spacing:-.5px}
+.top h1 .green{background:var(--accentGrad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.logo{background:linear-gradient(160deg,#10243a,#07121f)!important;border:1px solid rgba(47,240,143,.28)!important;box-shadow:0 10px 28px rgba(47,240,143,.18)!important}
+.logo img{object-fit:contain!important;width:74%!important;height:74%!important;filter:drop-shadow(0 2px 6px rgba(47,240,143,.35))}
+.mvBtn.primary,.primaryBtn,.routePrimaryBig{background:var(--accentGrad)!important;color:var(--onAccent)!important;border:0!important;box-shadow:0 8px 22px rgba(47,240,143,.25)}
+.mvThemeBtn{display:grid;place-items:center}
+.mvThemeBtn svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.topActions{display:flex;gap:8px}
+.mvThemeSeg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:5px;border-radius:16px;border:1px solid var(--line);background:rgba(127,127,127,.08);margin-top:10px}
+.mvThemeSeg button{height:40px;border:0;border-radius:12px;background:transparent;color:var(--muted);font-weight:700;font-size:13px;font-family:inherit;cursor:pointer}
+.mvThemeSeg button.on{background:var(--accentGrad);color:var(--onAccent)}
+
+/* ---------- light theme ---------- */
+html[data-theme="light"]{color-scheme:light;--bg:#f3f6fa;--card:#ffffff;--surface:#ffffff;--surface2:#f1f5f9;--line:rgba(15,35,60,.12);--text:#0d1b2a;--muted:#5a6b80;--green:#0d9f5a;--blue:#1677d2;--yellow:#a8650a;--shadow:0 10px 30px rgba(15,35,60,.10);--onAccent:#03140b}
+html[data-theme="light"] body{background:radial-gradient(1000px 420px at 0% -10%,rgba(47,240,143,.22),transparent 60%),radial-gradient(800px 420px at 110% 0%,rgba(34,211,238,.20),transparent 55%),#f3f6fa!important;background-attachment:fixed!important;color:var(--text)!important}
+html[data-theme="light"] h1,html[data-theme="light"] h2,html[data-theme="light"] h3,html[data-theme="light"] h4,html[data-theme="light"] b,html[data-theme="light"] label{color:var(--text)}
+html[data-theme="light"] .muted,html[data-theme="light"] p{color:var(--muted)}
+html[data-theme="light"] .top h1 .green{background:linear-gradient(135deg,#0fbf6a,#0aa2c0);-webkit-background-clip:text;background-clip:text}
+html[data-theme="light"] input,html[data-theme="light"] select,html[data-theme="light"] textarea{background:#fff!important;color:var(--text)!important;border-color:var(--line)!important}
+html[data-theme="light"] input::placeholder,html[data-theme="light"] textarea::placeholder{color:#8a99ab!important}
+html[data-theme="light"] .search,html[data-theme="light"] .mvMainSearch{background:#fff!important;border:1px solid var(--line)!important;box-shadow:var(--shadow)!important}
+html[data-theme="light"] .mvMainSearch input{background:transparent!important}
+html[data-theme="light"] .iconBtn{background:#fff!important;color:var(--text)!important;border:1px solid var(--line)!important;box-shadow:0 4px 14px rgba(15,35,60,.08)!important}
+html[data-theme="light"] .mvCard,html[data-theme="light"] .panel,html[data-theme="light"] .sponsorCard,html[data-theme="light"] .routeHero,html[data-theme="light"] .station,html[data-theme="light"] .couponRow,html[data-theme="light"] .cariRow{background:#fff!important;border:1px solid var(--line)!important;box-shadow:var(--shadow)!important;color:var(--text)}
+html[data-theme="light"] .mvCardTitle p b{color:#24364a}
+html[data-theme="light"] .mvPill{background:#eef3f8;color:#34475c;border-color:rgba(15,35,60,.08)}
+html[data-theme="light"] .mvPill.ok{color:#0a7f47;background:rgba(15,191,106,.12);border-color:rgba(15,191,106,.35)}
+html[data-theme="light"] .mvPill.busy{color:#9a5b00;background:rgba(245,158,11,.14);border-color:rgba(245,158,11,.35)}
+html[data-theme="light"] .mvPill.off{color:#b42318;background:rgba(240,68,56,.10);border-color:rgba(240,68,56,.3)}
+html[data-theme="light"] .mvPill.none{color:#6b7b8f}
+html[data-theme="light"] .mvBtn.ghost,html[data-theme="light"] .secondaryBtn,html[data-theme="light"] .mapShowBtn{background:#f1f5f9!important;color:var(--text)!important;border:1px solid var(--line)!important}
+html[data-theme="light"] .mvCardFoot{border-top-color:var(--line)}
+html[data-theme="light"] .mvFavBtn{color:#94a3b8}
+html[data-theme="light"] .mvFavBtn.on,html[data-theme="light"] .mvOffer{color:#c27c0e}
+html[data-theme="light"] .bottomNav{background:rgba(255,255,255,.94)!important;border:1px solid var(--line)!important;box-shadow:0 12px 36px rgba(15,35,60,.16)!important}
+html[data-theme="light"] .navItem{color:#5a6b80!important;background:transparent!important}
+html[data-theme="light"] .navItem.active{color:#0a8a4d!important;background:rgba(15,191,106,.12)!important}
+html[data-theme="light"] .navItem .navIcon{background:transparent!important}
+html[data-theme="light"] .navItem svg{stroke:currentColor!important}
+html[data-theme="light"] .chip,html[data-theme="light"] .availFilter,html[data-theme="light"] .sorts button{background:#fff!important;color:#34475c!important;border:1px solid var(--line)!important}
+html[data-theme="light"] .chip.active,html[data-theme="light"] .availFilter.active,html[data-theme="light"] .sorts button.active{background:rgba(15,191,106,.14)!important;color:#0a7f47!important;border-color:rgba(15,191,106,.45)!important}
+html[data-theme="light"] .modal .sheet{background:#fff!important;color:var(--text)!important;box-shadow:0 -10px 40px rgba(15,35,60,.18)!important}
+html[data-theme="light"] .modal .close{background:#f1f5f9!important;color:var(--text)!important;border:1px solid var(--line)!important}
+html[data-theme="light"] .mvStatus,html[data-theme="light"] .mvInfoGrid div{background:#f6f9fc;border-color:var(--line)}
+html[data-theme="light"] .mvStatus.ok{background:rgba(15,191,106,.08)}
+html[data-theme="light"] .mvSoon{border-color:rgba(15,35,60,.18)}
+html[data-theme="light"] .mvSockets i{background:#dbe3ec}
+html[data-theme="light"] .mvOfferCard{background:rgba(245,158,11,.06);border-color:rgba(245,158,11,.3)}
+html[data-theme="light"] .mvBrandList,html[data-theme="light"] .mvBrandSearch{background:#fff;border-color:var(--line)}
+html[data-theme="light"] .mvBrandRow{color:var(--text);border-bottom-color:rgba(15,35,60,.06)}
+html[data-theme="light"] .mvBrandFavs .mvChip{background:rgba(245,158,11,.12);border-color:rgba(245,158,11,.4);color:var(--text)}
+html[data-theme="light"] .mvBrandFavs .mvChip button{background:rgba(15,35,60,.08);color:var(--text)}
+html[data-theme="light"] .mvRouteBrandNote,html[data-theme="light"] .mvAvailabilityNotice{background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.35);color:#6b4a07}
+html[data-theme="light"] .mvRouteBrandNote b{color:#3d2a03}
+html[data-theme="light"] .mvFavEmpty,html[data-theme="light"] .empty{background:#fff;border-color:rgba(15,35,60,.16);color:var(--muted)}
+html[data-theme="light"] .gift{background:#f1f5f9!important}
+html[data-theme="light"] .tag{background:#eef3f8!important;color:#34475c!important;border-color:rgba(15,35,60,.08)!important}
+html[data-theme="light"] .tag.g{color:#0a7f47!important;background:rgba(15,191,106,.12)!important}
+html[data-theme="light"] .homeMapWrap{box-shadow:var(--shadow)}
+html[data-theme="light"] .routeToast{background:#0d1b2a!important;color:#fff!important}
+html[data-theme="light"] .mvStepTitle,html[data-theme="light"] #tab-route .mvStepTitle{color:var(--text)!important}
+html[data-theme="light"] #tab-route .mvGooglePlaceStatus,html[data-theme="light"] .mvRouteHint{color:#5a6b80!important}
+html[data-theme="light"] #tab-route .mvGooglePlaceStatus[data-state="success"]{color:#0a7f47!important}
+html[data-theme="light"] #tab-route .mvGooglePlaceStatus[data-state="error"]{color:#9a5b00!important}
+html[data-theme="light"] .routeSuggest{background:#fff!important;border:1px solid var(--line)!important;box-shadow:var(--shadow)!important}
+html[data-theme="light"] .routeSuggest button,html[data-theme="light"] .mvGooglePredictionName{color:var(--text)!important}
+html[data-theme="light"] .routeDirectCard,html[data-theme="light"] .routeResultCard,html[data-theme="light"] .routeStop{background:#fff!important;border:1px solid var(--line)!important;color:var(--text)!important;box-shadow:var(--shadow)!important}
+html[data-theme="light"] .routeDirectCard.warning{border-color:rgba(245,158,11,.45)!important}
+html[data-theme="light"] .routeEffectNote,html[data-theme="light"] .routeEffectNote *{color:#24364a!important}
+html[data-theme="light"] .routeEffectNote{background:rgba(15,191,106,.08)!important;border-color:rgba(15,191,106,.3)!important}
+html[data-theme="light"] .routeWarn,html[data-theme="light"] .routeWarn *{color:#7a4a00!important}
+html[data-theme="light"] .routeWarn{background:rgba(245,158,11,.10)!important;border-color:rgba(245,158,11,.4)!important}
+html[data-theme="light"] .mvAvailabilityNotice button{background:#fff!important;color:#0a7f47!important;border-color:rgba(15,191,106,.4)!important}
+</style>
+<script id="mv-theme-js-1016">
+(function(){
+  const KEY='molavolt_theme',mq=window.matchMedia?matchMedia('(prefers-color-scheme: dark)'):null;
+  const pref=()=>{try{return localStorage.getItem(KEY)||'system'}catch(_){return 'system'}};
+  function resolved(p){return p==='dark'||(p==='system'&&mq&&mq.matches)?'dark':'light'}
+  const SUN='<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/></svg>';
+  const MOON='<svg viewBox="0 0 24 24"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5a8.5 8.5 0 1 0 10.7 10.7Z"/></svg>';
+  function apply(){
+    const t=resolved(pref());document.documentElement.dataset.theme=t;
+    const meta=document.querySelector('meta[name="theme-color"]');if(meta)meta.setAttribute('content',t==='dark'?'#07111d':'#f3f6fa');
+    const btn=document.getElementById('mvThemeBtn');if(btn){btn.innerHTML=t==='dark'?SUN:MOON;btn.setAttribute('aria-label',t==='dark'?'Açık temaya geç':'Koyu temaya geç');}
+    document.querySelectorAll('.mvThemeSeg button').forEach(b=>b.classList.toggle('on',b.dataset.theme===pref()));
+  }
+  window.mvSetTheme=function(p){try{localStorage.setItem(KEY,p)}catch(_){}apply();};
+  if(mq&&mq.addEventListener)mq.addEventListener('change',()=>{if(pref()==='system')apply()});
+  // Header: quick light/dark switch next to refresh.
+  const refresh=document.querySelector('.top .iconBtn.customerOnly');
+  if(refresh&&!document.getElementById('mvThemeBtn')){
+    const wrap=document.createElement('div');wrap.className='topActions customerOnly';
+    refresh.parentNode.insertBefore(wrap,refresh);
+    const b=document.createElement('button');b.type='button';b.id='mvThemeBtn';b.className='iconBtn mvThemeBtn';
+    b.addEventListener('click',()=>window.mvSetTheme(resolved(pref())==='dark'?'light':'dark'));
+    wrap.appendChild(b);wrap.appendChild(refresh);refresh.classList.remove('customerOnly');
+  }
+  // Profile: system / light / dark.
+  const prof=document.querySelector('#tab-profile .section');
+  if(prof&&!document.querySelector('.mvThemeSeg')){
+    const panel=document.createElement('div');panel.className='panel';
+    panel.innerHTML='<b>Görünüm</b><p class="muted" style="margin:4px 0 0">Telefonun ayarını izle ya da açık / koyu temayı seç.</p><div class="mvThemeSeg" role="radiogroup" aria-label="Tema"><button type="button" data-theme="system">Sistem</button><button type="button" data-theme="light">Açık</button><button type="button" data-theme="dark">Koyu</button></div>';
+    panel.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>window.mvSetTheme(b.dataset.theme)));
+    const first=prof.querySelector('.panel');if(first&&first.nextSibling)prof.insertBefore(panel,first.nextSibling);else prof.appendChild(panel);
+  }
+  apply();
 })();
 </script>
 </body>
