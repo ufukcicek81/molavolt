@@ -6121,8 +6121,10 @@ body:not(.admin-mode) .bottomNav.customerOnly{grid-template-columns:repeat(5,min
   function missing(b){const t=String(b||'').trim();return !t||/^(diğer|diger|other|bilinmiyor|-)(\s|$)/i.test(t)}
   function rawBrand(s){
     // Older cached lists stored the legal title as the brand; shorten those too.
-    if(!missing(s.brand))return /ANON[İI]M|Ş[İI]RKET|A\.\s?Ş|L[İI]M[İI]TED|\bLTD|ŞT[İI]/i.test(s.brand)?(normBrand(brandFromTitle(s.brand))||String(s.brand).trim()):String(s.brand).trim();
-    const fromTitle=brandFromTitle(s.operator||s.operatorName);
+    // Lists saved while an older brand script was active hold short names ("Sharz", "WAT") or "Diğer";
+    // run every brand through normBrand so they merge with current names ("Sharz.net", "WAT Mobilite").
+    if(!missing(s.brand)){const b=String(s.brand).trim();return /ANON[İI]M|Ş[İI]RKET|A\.\s?Ş|L[İI]M[İI]TED|\bLTD|ŞT[İI]/i.test(b)?(normBrand(brandFromTitle(b))||b):normBrand(b);}
+    const fromTitle=brandFromTitle(s.operator||s.operatorName||s.sarjAgiIsletmecisiUnvan||s.company);
     if(fromTitle)return normBrand(fromTitle);
     return String(s.name||'Şarj istasyonu').split(/[-–·,]/)[0].trim()||'Şarj istasyonu';
   }
