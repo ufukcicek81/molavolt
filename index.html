@@ -799,6 +799,9 @@ html.mv-admin-start .adminOnly{
   });
 })();
 </script>
+<script id="mv-theme-boot-1016">
+(function(){try{var pref=localStorage.getItem('molavolt_theme')||'system';var dark=pref==='dark'||(pref==='system'&&window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.dataset.theme=dark?'dark':'light';}catch(e){document.documentElement.dataset.theme='dark';}})();
+</script>
 <script id="mv-epdk-fetch-share-1016">
 /* Several startup loaders each download the full EPDK list (~25 MB). Share one download per 10 minutes
    per page session; the cache-busting t= parameters are dropped so they all hit the same request. */
@@ -827,15 +830,16 @@ html.mv-admin-start .adminOnly{
 })();
 </script>
 
- <link rel="manifest" href="manifest.json?v=0607">
+ <link rel="manifest" href="manifest.json?v=1016">
   <meta name="theme-color" content="#07111d">
-  <link rel="apple-touch-icon" href="icon-192.png?v=0607">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png?v=1016">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=1016">
 </head>
 <body>
 <div id="routeToast" class="routeToast">Rota oluşturuluyor…</div>
 <div class="app">
   <div class="top">
-    <div class="brand"><div class="logo"><img src="logo.png?v=0607" onerror="this.onerror=null;this.src='icon-192.png?v=0607';this.onerror=()=>{this.style.display='none';this.parentNode.innerHTML='<span class=bolt>⚡</span>'}"></div><div><h1>Mola<span class="green">Volt</span></h1><p id="subTitle">Yakındaki şarj istasyonları</p></div></div>
+    <div class="brand"><div class="logo"><img src="logo-mark.png?v=1016" alt="MolaVolt" width="40" height="54" onerror="this.onerror=null;this.style.display='none';this.parentNode.innerHTML='<span class=bolt>⚡</span>'"></div><div><h1>Mola<span class="green">Volt</span></h1><p id="subTitle">Yakındaki şarj istasyonları</p></div></div>
     <button class="iconBtn customerOnly" onclick="hardRefresh()">↻</button>
     <button class="iconBtn adminOnly" onclick="renderAdmin()">↻</button>
   </div>
@@ -851,7 +855,7 @@ html.mv-admin-start .adminOnly{
         <div class="homeMapHead"><div><h3 style="margin:0">Harita</h3><p class="muted" style="margin:4px 0 0">İstasyonları haritada hızlıca keşfet</p></div><button class="mapExpandBtn" type="button" onclick="openHomeMapFullscreen()">⛶ Tam ekran</button></div>
         <div class="homeMapWrap"><button class="mapFullscreenClose" type="button" onclick="closeHomeMapFullscreen()" aria-label="Haritayı kapat">×</button><div class="homeMapModeBtns"><button id="homeMapNearbyBtn" type="button" onclick="toggleHomeMapNearby()">Yakınım 100</button><button id="homeMapLayerBtn" type="button" onclick="toggleHomeMapLayer()">Uydu</button></div><div id="homeStationMap"></div><div class="homeMapLegend"><span><i class="mapLegendDot"></i> Yakındaki istasyonlar</span><span id="homeMapCount" hidden></span></div></div>
       </section>
-      <section class="section"><h3>Yakındaki istasyonlar</h3><p class="muted" id="countText" hidden></p><p class="muted" id="locStatus" style="font-size:13px;margin-top:4px">Yakındaki istasyonlar konumuna göre sıralanır.</p><div class="sorts"><button id="sortDistance" class="sort active" onclick="setSort('distance')">En yakın</button><button id="sortName" class="sort" onclick="setSort('name')">A-Z</button></div><div class="cards" id="homeCards"></div></section>
+      <section class="section"><h3>Yakındaki istasyonlar</h3><p class="muted" id="countText" hidden></p><p class="muted" id="locStatus" style="font-size:13px;margin-top:4px">Yakındaki istasyonlar konumuna göre sıralanır.</p><div class="sorts mvSorts" id="mvSorts"></div><div class="cards" id="homeCards"></div></section>
     </div>
     <div class="tab" id="tab-stations"><section class="section"><h3>İstasyonlar</h3><p class="muted">Marka seçerek veya arama yaparak filtreleyebilirsin.</p><div class="cards" id="stationCards"></div></section></div>
 
@@ -1158,7 +1162,7 @@ function toNum(v){if(typeof v==='number')return v;const m=String(v??'').replace(
 function pick(o,keys){for(const k of keys){if(o&&o[k]!==undefined&&o[k]!==null&&String(o[k]).trim()!=='')return o[k]}return''}
 function rowObject(row,cols){if(!Array.isArray(row))return row||{};const o={};(cols||[]).forEach((c,i)=>o[c]=row[i]);return o}
 function parseMaybe(v){if(typeof v!=='string')return v;const t=v.trim();if(!t)return v;try{return JSON.parse(t)}catch(e){}const a=t.indexOf('['),b=t.lastIndexOf(']');if(a>=0&&b>a){try{return JSON.parse(t.slice(a,b+1))}catch(e){}}const c=t.indexOf('{'),d=t.lastIndexOf('}');if(c>=0&&d>c){try{return JSON.parse(t.slice(c,d+1))}catch(e){}}return v}
-function socketSummary(soketler){let sockets='Soket bilgisi EPDK verisinde',power='kW bilgisi EPDK verisinde';try{soketler=parseMaybe(soketler);const arr=Array.isArray(soketler)?soketler:(soketler?[soketler]:[]);const sv=[],pv=[];arr.forEach(x=>{x=parseMaybe(x);if(!x)return;const st=pick(x,['soketTipi','soketTuru','socketType','connectorType','tip']);const pw=pick(x,['soketGucu','guc','kw','power']);if(st)sv.push(String(st));if(pw)pv.push(String(pw).includes('kW')?String(pw):String(pw)+' kW')});if(sv.length)sockets=[...new Set(sv)].join(' / ');if(pv.length)power=[...new Set(pv)].join(' / ')}catch(e){}return{sockets,power}}
+function socketSummary(soketler){let sockets='Soket bilgisi EPDK verisinde',power='kW bilgisi EPDK verisinde';try{soketler=parseMaybe(soketler);const arr=Array.isArray(soketler)?soketler:(soketler?[soketler]:[]);const sv=[],pv=[];arr.forEach(x=>{x=parseMaybe(x);if(!x)return;const rawSt=String(pick(x,['soketTuru','soketTipi','socketType','connectorType','tip'])||'');const st=/CHADEMO/i.test(rawSt)?'CHAdeMO':/CCS/i.test(rawSt)?'CCS2':/TYPE.?2|AC_TYPE/i.test(rawSt)?'Type 2':rawSt;const pw=pick(x,['soketGucu','guc','kw','power']);if(st)sv.push(String(st));if(pw)pv.push(String(pw).includes('kW')?String(pw):String(pw)+' kW')});if(sv.length)sockets=[...new Set(sv)].join(' / ');if(pv.length)power=[...new Set(pv)].join(' / ')}catch(e){}return{sockets,power}}
 function normalizeEpdkData(data){data=parseMaybe(data);let rows=[];const cols=data&&Array.isArray(data.columnNames)?data.columnNames:[];if(data&&typeof data.result==='string')data={...data,result:parseMaybe(data.result)};if(Array.isArray(data))rows=data;else if(data&&Array.isArray(data.result))rows=data.result.map(r=>rowObject(parseMaybe(r),cols));else if(data&&data.result&&typeof data.result==='object')rows=[data.result];else if(data&&data.data){const d=parseMaybe(data.data);if(Array.isArray(d))rows=d;else if(d&&Array.isArray(d.result))rows=d.result.map(r=>rowObject(parseMaybe(r),cols))}const out=[];rows.forEach((raw,idx)=>{raw=parseMaybe(raw);const r=rowObject(raw,cols);const lat=toNum(pick(r,['enlem','lat','latitude','koordinatx','koordinatX']));const lon=toNum(pick(r,['boylam','lon','lng','longitude','koordinaty','koordinatY']));if(!isFinite(lat)||!isFinite(lon))return;const sok=socketSummary(r.soketler);const name=pick(r,['sarjIstasyonuAdi','istasyonAdi','ad','name'])||'EPDK Şarj İstasyonu';const op=pick(r,['marka','sarjAgiIsletmecisiUnvan','sarjIstasyonuIsletmecisi','isletmeciUnvan'])||'Diğer';const address=pick(r,['adres','address'])||'Adres bilgisi yok';const no=pick(r,['sarjIstasyonuNo','istasyonNo','id'])||(idx+'-'+lat.toFixed(5)+'-'+lon.toFixed(5));out.push({id:'epdk-'+String(no).replace(/[^a-zA-Z0-9_.-]/g,'-')+'-'+idx,name:String(name),brand:normBrand(String(op)+' '+String(name)),type:pick(r,['hizmetSekli'])||'Şarj',status:'Açık',address:String(address),lat,lon,distance:km(userPos.lat,userPos.lon,lat,lon),sockets:sok.sockets,power:sok.power,source:'EPDK'})});const seen=new Set();return out.filter(s=>{const key=s.name+'|'+s.lat.toFixed(5)+'|'+s.lon.toFixed(5);if(seen.has(key))return false;seen.add(key);return true})}
 function clearLegacy(){clearLegacySilent();alert('Eski kayıtlar temizlendi.')}function clearLegacySilent(){LEGACY_KEYS.forEach(k=>localStorage.removeItem(k));Object.keys(localStorage).filter(k=>k.startsWith('molavolt_osm')).forEach(k=>localStorage.removeItem(k))}
 function buildStations(){stations=epdkStations().map(s=>({...s,distance:km(userPos.lat,userPos.lon,s.lat,s.lon)})).sort((a,b)=>distKey(a)-distKey(b)||0)}
@@ -5104,7 +5108,7 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
     return Number.isFinite(lat)&&Number.isFinite(lon)&&lat>=35&&lat<=43&&lon>=25&&lon<=46;
   }
   function getStations(){
-    try{return Array.isArray(stations)?stations.filter(validCoord):[]}catch(e){return []}
+    try{return Array.isArray(stations)?stations.filter(function(s){return validCoord(s)&&(typeof window.mvExtraFilter!=='function'||window.mvExtraFilter(s))}):[]}catch(e){return []}
   }
   function distKm(lat1,lon1,lat2,lon2){
     var rad=Math.PI/180, a=(lat2-lat1)*rad,b=(lon2-lon1)*rad;
@@ -5804,8 +5808,8 @@ if('serviceWorker' in navigator && (location.protocol==='https:' || location.hos
         (activeAvailability==='ok'&&s.availabilityKey==='ok'&&window.mvAvailabilityTrusted(s))||
         (activeAvailability==='busy'&&s.availabilityKey==='busy'&&window.mvAvailabilityTrusted(s))||
         (activeAvailability==='unknown'&&(!window.mvAvailabilityTrusted(s)||s.availabilityKey==='off'));
-      return isBrand&&matches(s,q)&&isAvailable;
-    }).sort((a,b)=>sortMode==='name'?String(a.name||'').localeCompare(String(b.name||''),'tr'):(distKey(a)-distKey(b)||0));
+      return isBrand&&matches(s,q)&&isAvailable&&(typeof window.mvExtraFilter!=='function'||window.mvExtraFilter(s));
+    }).sort((a,b)=>typeof window.mvSortCompare==='function'?window.mvSortCompare(a,b):sortMode==='name'?String(a.name||'').localeCompare(String(b.name||''),'tr'):(distKey(a)-distKey(b)||0));
     homeLimit=30;stationLimit=60;
     renderAll();updateSearchUi();
   }
@@ -5948,6 +5952,7 @@ body:not(.admin-mode) .bottomNav.customerOnly{grid-template-columns:repeat(5,min
       list.unshift({key:k,addedAt:Date.now(),station:snap});added=true;
     }
     if(!writeFavs(list)){alert('Favori kaydedilemedi: cihaz depolama alanı dolu veya kapalı.');return;}
+    if(window.mvCloudSave)window.mvCloudSave();
     if(typeof routeToast==='function')routeToast(added?'Favorilere eklendi':'Favorilerden çıkarıldı');
     if(window.mvInvalidateMapFav)window.mvInvalidateMapFav();
     renderCards();renderFavs();
@@ -6162,6 +6167,7 @@ body:not(.admin-mode) .bottomNav.customerOnly{grid-template-columns:repeat(5,min
     if(i>=0)list.splice(i,1);else list.push(b);
     setFavBrands(list);
     window.mvInvalidateMapFav();
+    if(window.mvCloudSave)window.mvCloudSave();
     if(typeof routeToast==='function')routeToast(i>=0?b+' favorilerden çıkarıldı':b+' favori markalara eklendi');
     renderBrandFavs();renderRouteBrandNote();renderFavs();
     if(window.renderHomeStationMap)setTimeout(window.renderHomeStationMap,50);
@@ -6220,6 +6226,403 @@ body:not(.admin-mode) .bottomNav.customerOnly{grid-template-columns:repeat(5,min
     };
   }
   try{buildStations();if(typeof renderChips==='function')renderChips();if(typeof applyFilters==='function')applyFilters();renderFavs();}catch(err){console.warn(err)}
+})();
+</script>
+
+<style id="mv-theme-1016">
+/* MV_THEME_1016: light / dark themes and a livelier brand accent. */
+:root{--accent:#2ff08f;--accent2:#22d3ee;--accentGrad:linear-gradient(135deg,#2ff08f 0%,#22d3ee 100%);--surface:#0f1d2e;--surface2:#13253a;--onAccent:#03140b}
+html[data-theme="dark"] body{background:radial-gradient(1200px 500px at 10% -10%,rgba(47,240,143,.16),transparent 60%),radial-gradient(900px 500px at 110% 0%,rgba(34,211,238,.14),transparent 55%),linear-gradient(180deg,#06101b,#081522 60%,#06101b)!important;background-attachment:fixed!important}
+.top h1{letter-spacing:-.5px}
+.top h1 .green{background:var(--accentGrad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.logo{background:linear-gradient(160deg,#10243a,#07121f)!important;border:1px solid rgba(47,240,143,.28)!important;box-shadow:0 10px 28px rgba(47,240,143,.18)!important}
+.logo img{object-fit:contain!important;width:74%!important;height:74%!important;filter:drop-shadow(0 2px 6px rgba(47,240,143,.35))}
+.mvBtn.primary,.primaryBtn,.routePrimaryBig{background:var(--accentGrad)!important;color:var(--onAccent)!important;border:0!important;box-shadow:0 8px 22px rgba(47,240,143,.25)}
+.mvThemeBtn{display:grid;place-items:center}
+.mvThemeBtn svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.topActions{display:flex;gap:8px}
+.mvThemeSeg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:5px;border-radius:16px;border:1px solid var(--line);background:rgba(127,127,127,.08);margin-top:10px}
+.mvThemeSeg button{height:40px;border:0;border-radius:12px;background:transparent;color:var(--muted);font-weight:700;font-size:13px;font-family:inherit;cursor:pointer}
+.mvThemeSeg button.on{background:var(--accentGrad);color:var(--onAccent)}
+
+/* ---------- light theme ---------- */
+html[data-theme="light"]{color-scheme:light;--bg:#f3f6fa;--card:#ffffff;--surface:#ffffff;--surface2:#f1f5f9;--line:rgba(15,35,60,.12);--text:#0d1b2a;--muted:#5a6b80;--green:#0d9f5a;--blue:#1677d2;--yellow:#a8650a;--shadow:0 10px 30px rgba(15,35,60,.10);--onAccent:#03140b}
+html[data-theme="light"] body{background:radial-gradient(1000px 420px at 0% -10%,rgba(47,240,143,.22),transparent 60%),radial-gradient(800px 420px at 110% 0%,rgba(34,211,238,.20),transparent 55%),#f3f6fa!important;background-attachment:fixed!important;color:var(--text)!important}
+html[data-theme="light"] h1,html[data-theme="light"] h2,html[data-theme="light"] h3,html[data-theme="light"] h4,html[data-theme="light"] b,html[data-theme="light"] label{color:var(--text)}
+html[data-theme="light"] .muted,html[data-theme="light"] p{color:var(--muted)}
+html[data-theme="light"] .top h1 .green{background:linear-gradient(135deg,#0fbf6a,#0aa2c0);-webkit-background-clip:text;background-clip:text}
+html[data-theme="light"] input,html[data-theme="light"] select,html[data-theme="light"] textarea{background:#fff!important;color:var(--text)!important;border-color:var(--line)!important}
+html[data-theme="light"] input::placeholder,html[data-theme="light"] textarea::placeholder{color:#8a99ab!important}
+html[data-theme="light"] .search,html[data-theme="light"] .mvMainSearch{background:#fff!important;border:1px solid var(--line)!important;box-shadow:var(--shadow)!important}
+html[data-theme="light"] .mvMainSearch input{background:transparent!important}
+html[data-theme="light"] .iconBtn{background:#fff!important;color:var(--text)!important;border:1px solid var(--line)!important;box-shadow:0 4px 14px rgba(15,35,60,.08)!important}
+html[data-theme="light"] .mvCard,html[data-theme="light"] .panel,html[data-theme="light"] .sponsorCard,html[data-theme="light"] .routeHero,html[data-theme="light"] .station,html[data-theme="light"] .couponRow,html[data-theme="light"] .cariRow{background:#fff!important;border:1px solid var(--line)!important;box-shadow:var(--shadow)!important;color:var(--text)}
+html[data-theme="light"] .mvCardTitle p b{color:#24364a}
+html[data-theme="light"] .mvPill{background:#eef3f8;color:#34475c;border-color:rgba(15,35,60,.08)}
+html[data-theme="light"] .mvPill.ok{color:#0a7f47;background:rgba(15,191,106,.12);border-color:rgba(15,191,106,.35)}
+html[data-theme="light"] .mvPill.busy{color:#9a5b00;background:rgba(245,158,11,.14);border-color:rgba(245,158,11,.35)}
+html[data-theme="light"] .mvPill.off{color:#b42318;background:rgba(240,68,56,.10);border-color:rgba(240,68,56,.3)}
+html[data-theme="light"] .mvPill.none{color:#6b7b8f}
+html[data-theme="light"] .mvBtn.ghost,html[data-theme="light"] .secondaryBtn,html[data-theme="light"] .mapShowBtn{background:#f1f5f9!important;color:var(--text)!important;border:1px solid var(--line)!important}
+html[data-theme="light"] .mvCardFoot{border-top-color:var(--line)}
+html[data-theme="light"] .mvFavBtn{color:#94a3b8}
+html[data-theme="light"] .mvFavBtn.on,html[data-theme="light"] .mvOffer{color:#c27c0e}
+html[data-theme="light"] .bottomNav{background:rgba(255,255,255,.94)!important;border:1px solid var(--line)!important;box-shadow:0 12px 36px rgba(15,35,60,.16)!important}
+html[data-theme="light"] .navItem{color:#5a6b80!important;background:transparent!important}
+html[data-theme="light"] .navItem.active{color:#0a8a4d!important;background:rgba(15,191,106,.12)!important}
+html[data-theme="light"] .navItem .navIcon{background:transparent!important}
+html[data-theme="light"] .navItem svg{stroke:currentColor!important}
+html[data-theme="light"] .chip,html[data-theme="light"] .availFilter,html[data-theme="light"] .sorts button{background:#fff!important;color:#34475c!important;border:1px solid var(--line)!important}
+html[data-theme="light"] .chip.active,html[data-theme="light"] .availFilter.active,html[data-theme="light"] .sorts button.active{background:rgba(15,191,106,.14)!important;color:#0a7f47!important;border-color:rgba(15,191,106,.45)!important}
+html[data-theme="light"] .modal .sheet{background:#fff!important;color:var(--text)!important;box-shadow:0 -10px 40px rgba(15,35,60,.18)!important}
+html[data-theme="light"] .modal .close{background:#f1f5f9!important;color:var(--text)!important;border:1px solid var(--line)!important}
+html[data-theme="light"] .mvStatus,html[data-theme="light"] .mvInfoGrid div{background:#f6f9fc;border-color:var(--line)}
+html[data-theme="light"] .mvStatus.ok{background:rgba(15,191,106,.08)}
+html[data-theme="light"] .mvSoon{border-color:rgba(15,35,60,.18)}
+html[data-theme="light"] .mvSockets i{background:#dbe3ec}
+html[data-theme="light"] .mvOfferCard{background:rgba(245,158,11,.06);border-color:rgba(245,158,11,.3)}
+html[data-theme="light"] .mvBrandList,html[data-theme="light"] .mvBrandSearch{background:#fff;border-color:var(--line)}
+html[data-theme="light"] .mvBrandRow{color:var(--text);border-bottom-color:rgba(15,35,60,.06)}
+html[data-theme="light"] .mvBrandFavs .mvChip{background:rgba(245,158,11,.12);border-color:rgba(245,158,11,.4);color:var(--text)}
+html[data-theme="light"] .mvBrandFavs .mvChip button{background:rgba(15,35,60,.08);color:var(--text)}
+html[data-theme="light"] .mvRouteBrandNote,html[data-theme="light"] .mvAvailabilityNotice{background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.35);color:#6b4a07}
+html[data-theme="light"] .mvRouteBrandNote b{color:#3d2a03}
+html[data-theme="light"] .mvFavEmpty,html[data-theme="light"] .empty{background:#fff;border-color:rgba(15,35,60,.16);color:var(--muted)}
+html[data-theme="light"] .gift{background:#f1f5f9!important}
+html[data-theme="light"] .tag{background:#eef3f8!important;color:#34475c!important;border-color:rgba(15,35,60,.08)!important}
+html[data-theme="light"] .tag.g{color:#0a7f47!important;background:rgba(15,191,106,.12)!important}
+html[data-theme="light"] .homeMapWrap{box-shadow:var(--shadow)}
+html[data-theme="light"] .routeToast{background:#0d1b2a!important;color:#fff!important}
+html[data-theme="light"] .mvStepTitle,html[data-theme="light"] #tab-route .mvStepTitle{color:var(--text)!important}
+html[data-theme="light"] #tab-route .mvGooglePlaceStatus,html[data-theme="light"] .mvRouteHint{color:#5a6b80!important}
+html[data-theme="light"] #tab-route .mvGooglePlaceStatus[data-state="success"]{color:#0a7f47!important}
+html[data-theme="light"] #tab-route .mvGooglePlaceStatus[data-state="error"]{color:#9a5b00!important}
+html[data-theme="light"] .routeSuggest{background:#fff!important;border:1px solid var(--line)!important;box-shadow:var(--shadow)!important}
+html[data-theme="light"] .routeSuggest button,html[data-theme="light"] .mvGooglePredictionName{color:var(--text)!important}
+html[data-theme="light"] .routeDirectCard,html[data-theme="light"] .routeResultCard,html[data-theme="light"] .routeStop{background:#fff!important;border:1px solid var(--line)!important;color:var(--text)!important;box-shadow:var(--shadow)!important}
+html[data-theme="light"] .routeDirectCard.warning{border-color:rgba(245,158,11,.45)!important}
+html[data-theme="light"] .routeEffectNote,html[data-theme="light"] .routeEffectNote *{color:#24364a!important}
+html[data-theme="light"] .routeEffectNote{background:rgba(15,191,106,.08)!important;border-color:rgba(15,191,106,.3)!important}
+html[data-theme="light"] .routeWarn,html[data-theme="light"] .routeWarn *{color:#7a4a00!important}
+html[data-theme="light"] .routeWarn{background:rgba(245,158,11,.10)!important;border-color:rgba(245,158,11,.4)!important}
+html[data-theme="light"] .mvAvailabilityNotice button{background:#fff!important;color:#0a7f47!important;border-color:rgba(15,191,106,.4)!important}
+</style>
+<script id="mv-theme-js-1016">
+(function(){
+  const KEY='molavolt_theme',mq=window.matchMedia?matchMedia('(prefers-color-scheme: dark)'):null;
+  const pref=()=>{try{return localStorage.getItem(KEY)||'system'}catch(_){return 'system'}};
+  function resolved(p){return p==='dark'||(p==='system'&&mq&&mq.matches)?'dark':'light'}
+  const SUN='<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6"/></svg>';
+  const MOON='<svg viewBox="0 0 24 24"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5a8.5 8.5 0 1 0 10.7 10.7Z"/></svg>';
+  function apply(){
+    const t=resolved(pref());document.documentElement.dataset.theme=t;
+    const meta=document.querySelector('meta[name="theme-color"]');if(meta)meta.setAttribute('content',t==='dark'?'#07111d':'#f3f6fa');
+    const btn=document.getElementById('mvThemeBtn');if(btn){btn.innerHTML=t==='dark'?SUN:MOON;btn.setAttribute('aria-label',t==='dark'?'Açık temaya geç':'Koyu temaya geç');}
+    document.querySelectorAll('.mvThemeSeg button').forEach(b=>b.classList.toggle('on',b.dataset.theme===pref()));
+  }
+  window.mvSetTheme=function(p){try{localStorage.setItem(KEY,p)}catch(_){}apply();};
+  if(mq&&mq.addEventListener)mq.addEventListener('change',()=>{if(pref()==='system')apply()});
+  // Header: quick light/dark switch next to refresh.
+  const refresh=document.querySelector('.top .iconBtn.customerOnly');
+  if(refresh&&!document.getElementById('mvThemeBtn')){
+    const wrap=document.createElement('div');wrap.className='topActions customerOnly';
+    refresh.parentNode.insertBefore(wrap,refresh);
+    const b=document.createElement('button');b.type='button';b.id='mvThemeBtn';b.className='iconBtn mvThemeBtn';
+    b.addEventListener('click',()=>window.mvSetTheme(resolved(pref())==='dark'?'light':'dark'));
+    wrap.appendChild(b);wrap.appendChild(refresh);refresh.classList.remove('customerOnly');
+  }
+  // Profile: system / light / dark.
+  const prof=document.querySelector('#tab-profile .section');
+  if(prof&&!document.querySelector('.mvThemeSeg')){
+    const panel=document.createElement('div');panel.className='panel';
+    panel.innerHTML='<b>Görünüm</b><p class="muted" style="margin:4px 0 0">Telefonun ayarını izle ya da açık / koyu temayı seç.</p><div class="mvThemeSeg" role="radiogroup" aria-label="Tema"><button type="button" data-theme="system">Sistem</button><button type="button" data-theme="light">Açık</button><button type="button" data-theme="dark">Koyu</button></div>';
+    panel.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>window.mvSetTheme(b.dataset.theme)));
+    const first=prof.querySelector('.panel');if(first&&first.nextSibling)prof.insertBefore(panel,first.nextSibling);else prof.appendChild(panel);
+  }
+  apply();
+})();
+</script>
+
+<div class="modal" id="mvFilterModal"><div class="sheet"><button class="close" onclick="closeModal('mvFilterModal')" aria-label="Kapat">×</button><h2 style="margin:0 0 4px">Filtrele ve sırala</h2><p class="muted" style="margin:0 0 6px">Seçimler ana sayfa, istasyon listesi ve haritada geçerli.</p><div id="mvFilterBody"></div></div></div>
+<style id="mv-filters-1016">
+.mvFilterBtn{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;height:44px;padding:0 14px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.05);color:var(--text);font-weight:750;font-size:13px;font-family:inherit;cursor:pointer}
+.mvFilterBtn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+.mvFilterBtn .n{min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--accentGrad);color:var(--onAccent);font-size:11px;display:grid;place-items:center}
+.mvFilterBtn.on{border-color:rgba(47,240,143,.5)}
+.mvFGroup{margin-top:16px}
+.mvFGroup h4{margin:0 0 8px;font-size:13px;letter-spacing:.3px;text-transform:uppercase;color:var(--muted)}
+.mvFOpts{display:flex;flex-wrap:wrap;gap:8px}
+.mvFOpt{height:40px;padding:0 14px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.05);color:var(--text);font-weight:700;font-size:13px;font-family:inherit;cursor:pointer}
+.mvFOpt.on{background:var(--accentGrad);color:var(--onAccent);border-color:transparent}
+.mvFActions{display:flex;gap:8px;margin-top:20px}
+.mvSorts{display:flex!important;gap:8px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.mvSorts::-webkit-scrollbar{display:none}
+.mvSorts .sort{flex:0 0 auto;white-space:nowrap}
+.mvActiveFilters{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.mvActiveFilters span{font-size:12px;font-weight:700;padding:5px 10px;border-radius:999px;background:rgba(47,240,143,.12);color:var(--green);border:1px solid rgba(47,240,143,.3)}
+.mvActiveFilters button{font-size:12px;font-weight:700;padding:5px 10px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer;font-family:inherit}
+.mvActiveFilters:empty{display:none}
+html[data-theme="light"] .mvFilterBtn,html[data-theme="light"] .mvFOpt{background:#fff;color:var(--text)}
+html[data-theme="light"] .mvFOpt.on{color:var(--onAccent)}
+html[data-theme="light"] .mvActiveFilters span{color:#0a7f47;background:rgba(15,191,106,.12)}
+body[data-tab="route"] .mvFilterBtn,body[data-tab="profile"] .mvFilterBtn,body[data-tab="favorites"] .mvFilterBtn,body[data-tab="route"] .mvActiveFilters,body[data-tab="profile"] .mvActiveFilters,body[data-tab="favorites"] .mvActiveFilters{display:none!important}
+</style>
+<script id="mv-filters-js-1016">
+/* MV_FILTERS_1016: connector type / minimum power filters and nearest / cheapest / fastest sorting. */
+(function(){
+  const KEY='molavolt_filters_v1';
+  const SORTS=[['distance','En yakın'],['price','En ucuz'],['power','En hızlı'],['name','A-Z']];
+  const CONNECTORS=['CCS2','Type 2','CHAdeMO'];
+  const POWERS=[[0,'Tümü'],[22,'22 kW+'],[50,'50 kW+ (DC)'],[150,'150 kW+']];
+  let state={sort:'distance',connectors:[],minKw:0};
+  try{state=Object.assign(state,JSON.parse(localStorage.getItem(KEY)||'{}'))}catch(_){}
+  const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(state))}catch(_){}};
+  function maxKw(s){const m=String(s.power||'').match(/\d+(?:[.,]\d+)?(?=\s*kW)/gi)||[];const v=m.map(x=>Number(x.replace(',','.'))).filter(Number.isFinite);return v.length?Math.max(...v):0}
+  // Older cached lists only say AC/DC: AC sockets are Type 2 and DC almost always CCS2 in Turkey.
+  function connectors(s){const t=String(s.sockets||'');const out=new Set();if(/CCS/i.test(t))out.add('CCS2');if(/TYPE\s?2/i.test(t))out.add('Type 2');if(/CHADEMO/i.test(t))out.add('CHAdeMO');if(!out.size){if(/\bAC\b/i.test(t))out.add('Type 2');if(/\bDC\b/i.test(t))out.add('CCS2');}return out}
+  function price(s){let p=Number(s.price);if(!Number.isFinite(p)&&typeof window.mvTariffFallback==='function')p=window.mvTariffFallback(s);return Number.isFinite(p)&&p>0?p:Infinity}
+  window.mvExtraFilter=function(s){
+    if(state.minKw&&maxKw(s)<state.minKw)return false;
+    if(state.connectors.length){const c=connectors(s);if(!state.connectors.some(x=>c.has(x)))return false;}
+    return true;
+  };
+  window.mvSortCompare=function(a,b){
+    const d=(distKey(a)-distKey(b))||0;
+    if(state.sort==='name')return String(a.name||'').localeCompare(String(b.name||''),'tr');
+    if(state.sort==='price')return (price(a)-price(b))||d;
+    if(state.sort==='power')return (maxKw(b)-maxKw(a))||d;
+    return d;
+  };
+  // Cheapest / fastest across all of Türkiye is not useful; rank those within 50 km first.
+  const baseCompare=window.mvSortCompare;
+  window.mvSortCompare=function(a,b){
+    if(state.sort==='price'||state.sort==='power'){const na=distKey(a)<=50,nb=distKey(b)<=50;if(na!==nb)return na?-1:1;}
+    return baseCompare(a,b);
+  };
+  window.setSort=function(v){state.sort=v;sortMode=v==='name'?'name':'distance';save();renderUi();applyFilters();};
+  function activeCount(){return state.connectors.length+(state.minKw?1:0)}
+  function renderUi(){
+    const sorts=document.getElementById('mvSorts');
+    if(sorts)sorts.innerHTML=SORTS.map(([k,l])=>`<button type="button" class="sort ${state.sort===k?'active':''}" onclick="setSort('${k}')">${l}</button>`).join('');
+    const btn=document.getElementById('mvFilterBtn');
+    if(btn){const n=activeCount();btn.classList.toggle('on',!!n);btn.innerHTML='<svg viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Filtre'+(n?`<span class="n">${n}</span>`:'');}
+    const act=document.getElementById('mvActiveFilters');
+    if(act){const tags=[...state.connectors,...(state.minKw?[state.minKw+' kW+']:[])];act.innerHTML=tags.length?tags.map(t=>`<span>${esc(t)}</span>`).join('')+'<button type="button" onclick="mvClearFilters()">Temizle</button>':'';}
+    const body=document.getElementById('mvFilterBody');
+    if(body){
+      const count=(stations||[]).filter(window.mvExtraFilter).length;
+      body.innerHTML=`<div class="mvFGroup"><h4>Sıralama</h4><div class="mvFOpts">${SORTS.map(([k,l])=>`<button type="button" class="mvFOpt ${state.sort===k?'on':''}" data-sort="${k}">${l}</button>`).join('')}</div></div>
+        <div class="mvFGroup"><h4>Soket tipi</h4><div class="mvFOpts">${CONNECTORS.map(c=>`<button type="button" class="mvFOpt ${state.connectors.includes(c)?'on':''}" data-conn="${c}">${c}</button>`).join('')}</div></div>
+        <div class="mvFGroup"><h4>En düşük güç</h4><div class="mvFOpts">${POWERS.map(([k,l])=>`<button type="button" class="mvFOpt ${state.minKw===k?'on':''}" data-kw="${k}">${l}</button>`).join('')}</div></div>
+        <div class="mvFActions"><button type="button" class="mvBtn ghost block" onclick="mvClearFilters()">Temizle</button><button type="button" class="mvBtn primary block" onclick="closeModal('mvFilterModal')">${count} istasyonu göster</button></div>`;
+      body.querySelectorAll('[data-sort]').forEach(b=>b.onclick=()=>{state.sort=b.dataset.sort;sortMode=state.sort==='name'?'name':'distance';changed()});
+      body.querySelectorAll('[data-conn]').forEach(b=>b.onclick=()=>{const c=b.dataset.conn,i=state.connectors.indexOf(c);if(i>=0)state.connectors.splice(i,1);else state.connectors.push(c);changed()});
+      body.querySelectorAll('[data-kw]').forEach(b=>b.onclick=()=>{state.minKw=Number(b.dataset.kw);changed()});
+    }
+  }
+  function changed(){save();renderUi();applyFilters();if(window.renderHomeStationMap)setTimeout(window.renderHomeStationMap,50);}
+  window.mvClearFilters=function(){state.connectors=[];state.minKw=0;changed();};
+  window.mvOpenFilters=function(){renderUi();openModal('mvFilterModal');};
+  const bar=document.querySelector('.mvBrandBar');
+  if(bar&&!document.getElementById('mvFilterBtn')){
+    const b=document.createElement('button');b.type='button';b.id='mvFilterBtn';b.className='mvFilterBtn';b.onclick=window.mvOpenFilters;bar.appendChild(b);
+    const act=document.createElement('div');act.id='mvActiveFilters';act.className='mvActiveFilters';bar.parentNode.insertBefore(act,bar.nextSibling);
+  }
+  sortMode=state.sort==='name'?'name':'distance';
+  renderUi();
+  try{applyFilters()}catch(err){console.warn(err)}
+})();
+</script>
+
+<style id="mv-account-1016">
+.mvAccount{display:flex;align-items:center;gap:12px}
+.mvAvatar{flex:0 0 46px;height:46px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:18px;color:var(--onAccent);background:var(--accentGrad);overflow:hidden}
+.mvAvatar img{width:100%;height:100%;object-fit:cover}
+.mvAccount .who{flex:1;min-width:0}
+.mvAccount .who b{display:block;font-size:16px}
+.mvAccount .who small{display:block;color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mvGoogleBtn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;height:48px;margin-top:12px;border-radius:14px;border:1px solid var(--line);background:#fff;color:#1f2937;font-weight:750;font-size:15px;font-family:inherit;cursor:pointer}
+.mvGoogleBtn svg{width:20px;height:20px}
+.mvPerks{margin:10px 0 0;padding:0;list-style:none;font-size:13px;color:var(--muted);line-height:1.7}
+.mvReports{margin-top:18px}
+.mvReportBtns{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.mvReportBtns button{height:44px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.05);color:var(--text);font-weight:750;font-size:13px;font-family:inherit;cursor:pointer}
+.mvReportBtns button.on{background:var(--accentGrad);color:var(--onAccent);border-color:transparent}
+.mvReportText{width:100%;min-height:64px;margin-top:8px;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--text);font-family:inherit;font-size:14px;resize:vertical}
+.mvReportList{margin-top:10px;display:grid;gap:8px}
+.mvReport{padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.03);font-size:13px}
+.mvReport .h{display:flex;justify-content:space-between;gap:8px;color:var(--muted);font-size:12px}
+.mvReport .st{font-weight:800}
+.mvReport .st.working{color:#35ef8d}.mvReport .st.broken{color:#ff8b8b}.mvReport .st.busy{color:#ffc46b}
+.mvReport p{margin:5px 0 0;color:var(--text)}
+.mvReport .del{border:0;background:transparent;color:var(--muted);font-size:12px;cursor:pointer;font-family:inherit;padding:0}
+.mvReportSummary{margin-top:6px;font-size:13px;color:var(--muted)}
+.mvAdminAuth{margin:8px 0 12px;padding:12px;border-radius:14px;border:1px solid rgba(255,224,129,.35);background:rgba(255,224,129,.07);font-size:13px}
+html[data-theme="light"] .mvReportBtns button,html[data-theme="light"] .mvReportText,html[data-theme="light"] .mvReport{background:#fff}
+html[data-theme="light"] .mvReport .st.working{color:#0a7f47}html[data-theme="light"] .mvReport .st.broken{color:#b42318}html[data-theme="light"] .mvReport .st.busy{color:#9a5b00}
+</style>
+<script type="module" id="mv-account-module-1016">
+/* MV_ACCOUNT_1016: Google sign-in, favorites sync and station status reports (Firebase Auth + Firestore). */
+import { getApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc, collection, addDoc, deleteDoc, query, where, limit, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+const app=getApp(), auth=getAuth(app), db=getFirestore(app);
+auth.languageCode='tr';
+const FAV='molavolt_favorites_v1', BRANDS='molavolt_fav_brands_v1';
+const readLocal=k=>{try{const v=JSON.parse(localStorage.getItem(k)||'[]');return Array.isArray(v)?v:[]}catch(_){return []}};
+const writeLocal=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_){}};
+const fold=b=>String(b||'').toLocaleLowerCase('tr-TR').replace(/ı/g,'i');
+function mergeFavs(a,b){const m=new Map();[...a,...b].forEach(f=>{if(!f||!f.key)return;const o=m.get(f.key);if(!o||(f.addedAt||0)<(o.addedAt||0))m.set(f.key,f)});return [...m.values()].sort((x,y)=>(y.addedAt||0)-(x.addedAt||0))}
+function mergeBrands(a,b){const m=new Map();[...a,...b].forEach(x=>{if(x&&!m.has(fold(x)))m.set(fold(x),x)});return [...m.values()]}
+let lastSync=null, saveTimer=null;
+function refreshViews(){try{if(window.mvInvalidateMapFav)window.mvInvalidateMapFav();renderCards();renderFavs();if(window.renderHomeStationMap)setTimeout(window.renderHomeStationMap,50)}catch(_){}}
+function emit(){document.dispatchEvent(new CustomEvent('mv-account',{detail:{user:auth.currentUser,lastSync}}))}
+async function pull(user){
+  const ref=doc(db,'users',user.uid),snap=await getDoc(ref),cloud=snap.exists()?snap.data():{};
+  const favs=mergeFavs(readLocal(FAV),cloud.favorites||[]),brands=mergeBrands(readLocal(BRANDS),cloud.favBrands||[]);
+  writeLocal(FAV,favs);writeLocal(BRANDS,brands);
+  await setDoc(ref,{favorites:favs,favBrands:brands,updatedAt:serverTimestamp()},{merge:true});
+  lastSync=Date.now();refreshViews();emit();
+}
+window.mvCloudSave=function(){
+  const user=auth.currentUser;if(!user)return;
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(async()=>{try{await setDoc(doc(db,'users',user.uid),{favorites:readLocal(FAV),favBrands:readLocal(BRANDS),updatedAt:serverTimestamp()},{merge:true});lastSync=Date.now();emit();}catch(err){console.warn('MolaVolt eşitleme:',err)}},800);
+};
+function authMessage(err){
+  const c=err&&err.code||'';
+  if(c==='auth/popup-closed-by-user'||c==='auth/cancelled-popup-request')return '';
+  if(c==='auth/unauthorized-domain')return 'Bu alan adı Firebase’de yetkili değil (Authentication > Settings > Authorized domains).';
+  if(c==='auth/operation-not-allowed')return 'Google ile giriş Firebase’de henüz açılmamış (Authentication > Sign-in method > Google).';
+  if(c==='auth/network-request-failed')return 'İnternet bağlantısı yok gibi görünüyor.';
+  return 'Giriş yapılamadı: '+(err&&err.message||c);
+}
+window.mvAccount={
+  get user(){return auth.currentUser},
+  get lastSync(){return lastSync},
+  async signIn(){
+    const provider=new GoogleAuthProvider();provider.setCustomParameters({prompt:'select_account'});
+    try{await signInWithPopup(auth,provider)}
+    catch(err){
+      if(['auth/popup-blocked','auth/operation-not-supported-in-this-environment'].includes(err.code)){await signInWithRedirect(auth,provider);return}
+      const m=authMessage(err);if(m)alert(m);
+    }
+  },
+  async signOut(){await signOut(auth)},
+  async reports(stationKey){
+    const snap=await getDocs(query(collection(db,'stationReports'),where('stationKey','==',stationKey),limit(30)));
+    return snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAt?.toMillis?.()||0)-(a.createdAt?.toMillis?.()||0));
+  },
+  async myReports(){
+    const u=auth.currentUser;if(!u)return [];
+    const snap=await getDocs(query(collection(db,'stationReports'),where('uid','==',u.uid),limit(50)));
+    return snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAt?.toMillis?.()||0)-(a.createdAt?.toMillis?.()||0));
+  },
+  async addReport(r){
+    const u=auth.currentUser;if(!u)throw new Error('Giriş yapmalısın.');
+    const first=String(u.displayName||'MolaVolt kullanıcısı').trim().split(/\s+/);
+    const userName=first.length>1?first[0]+' '+first[first.length-1][0]+'.':first[0];
+    await addDoc(collection(db,'stationReports'),{stationKey:String(r.stationKey).slice(0,300),stationName:String(r.stationName||'').slice(0,120),brand:String(r.brand||'').slice(0,80),status:r.status,comment:String(r.comment||'').trim().slice(0,280),uid:u.uid,userName,createdAt:serverTimestamp()});
+  },
+  async deleteReport(id){await deleteDoc(doc(db,'stationReports',id))}
+};
+getRedirectResult(auth).catch(err=>{const m=authMessage(err);if(m)alert(m)});
+onAuthStateChanged(auth,user=>{emit();if(user)pull(user).catch(err=>console.warn('MolaVolt eşitleme:',err));});
+document.dispatchEvent(new CustomEvent('mv-account-ready'));
+</script>
+<script id="mv-account-ui-1016">
+(function(){
+  const e=v=>esc(String(v??''));
+  const STATUS={working:['✓ Çalışıyor','working'],broken:['✗ Arızalı','broken'],busy:['⏳ Dolu / sıra var','busy']};
+  const GOOGLE='<svg viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 38.2 44 33 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>';
+  function ago(ms){if(!ms)return 'az önce';const m=Math.round((Date.now()-ms)/60000);if(m<1)return 'az önce';if(m<60)return m+' dk önce';const h=Math.round(m/60);if(h<24)return h+' saat önce';return Math.round(h/24)+' gün önce'}
+  const tsOf=r=>r.createdAt&&r.createdAt.toMillis?r.createdAt.toMillis():0;
+  const acct=()=>window.mvAccount;
+  window.mvSignIn=function(){if(!acct()){alert('Hesap servisine şu an ulaşılamıyor. İnternet bağlantını kontrol edip tekrar dene.');return}acct().signIn()};
+  window.mvSignOut=function(){if(acct()&&confirm('Çıkış yapılsın mı? Favorilerin bu cihazda kalır.'))acct().signOut()};
+
+  // ---- Profile: account card + my reports ----
+  function renderAccount(){
+    const prof=document.querySelector('#tab-profile .section');if(!prof)return;
+    let box=document.getElementById('mvAccountCard');
+    if(!box){box=document.createElement('div');box.id='mvAccountCard';box.className='panel';const h=prof.querySelector('h3');prof.insertBefore(box,h&&h.nextSibling?h.nextSibling.nextSibling:prof.firstChild);}
+    const u=acct()&&acct().user;
+    if(!u){
+      box.innerHTML=`<b style="font-size:17px">MolaVolt hesabı</b><ul class="mvPerks"><li>⭐ Favori istasyonların ve markaların tüm cihazlarında</li><li>📣 İstasyonlar için durum bildirimi ve yorum</li></ul><button type="button" class="mvGoogleBtn" onclick="mvSignIn()">${GOOGLE}Google ile giriş yap</button>`;
+      return;
+    }
+    const initial=String(u.displayName||u.email||'?').trim()[0].toLocaleUpperCase('tr-TR');
+    box.innerHTML=`<div class="mvAccount"><div class="mvAvatar">${u.photoURL?`<img src="${e(u.photoURL)}" alt="" referrerpolicy="no-referrer">`:e(initial)}</div><div class="who"><b>${e(u.displayName||'MolaVolt kullanıcısı')}</b><small>${e(u.email||'')}</small><small>${acct().lastSync?'Favoriler eşitlendi · '+ago(acct().lastSync):'Favoriler eşitleniyor…'}</small></div><button type="button" class="mvBtn ghost" onclick="mvSignOut()">Çıkış</button></div><div id="mvMyReports" class="mvReportList"></div>`;
+    acct().myReports().then(list=>{const el=document.getElementById('mvMyReports');if(!el)return;el.innerHTML=list.length?'<b style="margin-top:6px">Bildirimlerim</b>'+list.slice(0,10).map(r=>reportHtml(r,true)).join(''):'';}).catch(()=>{});
+  }
+
+  // ---- Station detail: reports ----
+  function reportHtml(r,mine){
+    const st=STATUS[r.status]||['Bildirim',''];
+    return `<div class="mvReport"><div class="h"><span><span class="st ${st[1]}">${st[0]}</span>${mine?' · '+e(r.stationName||''):' · '+e(r.userName||'Kullanıcı')}</span><span>${ago(tsOf(r))}${mine||(acct()&&acct().user&&acct().user.uid===r.uid)?` · <button type="button" class="del" onclick="mvDeleteReport('${e(r.id)}')">Sil</button>`:''}</span></div>${r.comment?`<p>${e(r.comment)}</p>`:''}</div>`;
+  }
+  let current=null,choice='';
+  async function loadReports(){
+    const box=document.getElementById('mvReportList');if(!box||!current)return;
+    if(!acct()){box.innerHTML='<div class="mvReportSummary">Bildirimler şu an yüklenemiyor.</div>';return}
+    box.innerHTML='<div class="mvReportSummary">Bildirimler yükleniyor…</div>';
+    try{
+      const list=await acct().reports(current.key);
+      const still=document.getElementById('mvReportList');if(!still)return;
+      const day=list.filter(r=>Date.now()-tsOf(r)<24*3600e3);
+      const last=list[0];
+      still.innerHTML=(last?`<div class="mvReportSummary">Son bildirim: <b>${(STATUS[last.status]||['?'])[0]}</b> · ${ago(tsOf(last))} · son 24 saatte ${day.length} bildirim</div>`:'<div class="mvReportSummary">Henüz bildirim yok. İlk bildiren sen ol.</div>')+list.slice(0,8).map(r=>reportHtml(r,false)).join('');
+    }catch(err){const el=document.getElementById('mvReportList');if(el)el.innerHTML='<div class="mvReportSummary">Bildirimler yüklenemedi.</div>';console.warn(err)}
+  }
+  function reportFormHtml(){
+    const u=acct()&&acct().user;
+    if(!u)return `<button type="button" class="mvGoogleBtn" onclick="mvSignIn()">${GOOGLE}Bildirmek için Google ile giriş yap</button>`;
+    return `<div class="mvReportBtns">${Object.entries(STATUS).map(([k,v])=>`<button type="button" data-st="${k}" class="${choice===k?'on':''}">${v[0]}</button>`).join('')}</div><textarea class="mvReportText" id="mvReportText" maxlength="280" placeholder="İsteğe bağlı yorum (ör. 2 numaralı soket çalışmıyor)"></textarea><button type="button" class="mvBtn primary block" style="width:100%;margin-top:8px" id="mvReportSend">Bildirimi gönder</button>`;
+  }
+  function bindForm(){
+    const sec=document.getElementById('mvReports');if(!sec)return;
+    sec.querySelectorAll('[data-st]').forEach(b=>b.onclick=()=>{choice=b.dataset.st;sec.querySelectorAll('[data-st]').forEach(x=>x.classList.toggle('on',x===b))});
+    const send=document.getElementById('mvReportSend');
+    if(send)send.onclick=async()=>{
+      if(!choice){alert('Önce istasyonun durumunu seç.');return}
+      const k='mv_report_'+current.key;try{const t=Number(localStorage.getItem(k)||0);if(Date.now()-t<10*60e3){alert('Bu istasyon için az önce bildirim yaptın. Biraz sonra tekrar deneyebilirsin.');return}}catch(_){}
+      send.disabled=true;send.textContent='Gönderiliyor…';
+      try{await acct().addReport({stationKey:current.key,stationName:current.name,brand:current.brand,status:choice,comment:(document.getElementById('mvReportText')||{}).value||''});try{localStorage.setItem(k,String(Date.now()))}catch(_){}choice='';if(typeof routeToast==='function')routeToast('Bildirimin için teşekkürler');renderReportsSection();}
+      catch(err){alert('Bildirim gönderilemedi: '+(err&&err.message||err));send.disabled=false;send.textContent='Bildirimi gönder';}
+    };
+  }
+  function renderReportsSection(){
+    const sec=document.getElementById('mvReports');if(!sec)return;
+    sec.innerHTML=`<h3 class="mvSectionTitle" style="margin-top:0">Kullanıcı bildirimleri</h3>${reportFormHtml()}<div id="mvReportList" class="mvReportList"></div>`;
+    bindForm();loadReports();
+  }
+  window.mvDeleteReport=async function(id){if(!confirm('Bildirim silinsin mi?'))return;try{await acct().deleteReport(id);renderReportsSection();renderAccount();}catch(err){alert('Silinemedi: '+(err&&err.message||err))}};
+  const baseDetail=openDetail;
+  openDetail=function(id){
+    baseDetail.apply(this,arguments);
+    const s=(stations||[]).find(x=>x.id===id)||(window.mvFavStations?window.mvFavStations().find(x=>x.id===id):null);
+    const host=document.querySelector('#detailContent .mvDetail');if(!s||!host)return;
+    current={key:window.mvFavKey?window.mvFavKey(s):String(s.name)+'|'+s.lat+'|'+s.lon,name:String(s.name||''),brand:String(s.brand||'')};choice='';
+    const sec=document.createElement('div');sec.id='mvReports';sec.className='mvReports';
+    const offers=host.querySelector('.mvSectionTitle');host.insertBefore(sec,offers||null);
+    renderReportsSection();
+  };
+  window.openDetail=openDetail;
+
+  // ---- Admin: Firestore writes need the admin Google account once the security rules are published ----
+  function renderAdminAuth(){
+    const page=document.getElementById('adminPage');if(!page)return;
+    let bar=document.getElementById('mvAdminAuth');
+    if(!bar){bar=document.createElement('div');bar.id='mvAdminAuth';bar.className='mvAdminAuth';page.insertBefore(bar,page.querySelector('.adminTabs'));}
+    const u=acct()&&acct().user;
+    bar.innerHTML=u?`Firebase yazma yetkisi: <b>${e(u.email||'')}</b>${u.email==='ufuk8790@gmail.com'?' ✓':' — bu hesap admin değil; istasyon ve sponsor kaydı reddedilir.'} <button type="button" class="secondaryBtn" onclick="mvSignOut()">Çıkış</button>`:`İstasyon ve sponsor verisini Firebase’e kaydetmek için admin Google hesabıyla giriş yap. <button type="button" class="secondaryBtn" onclick="mvSignIn()">Google ile giriş</button>`;
+  }
+  function renderAll2(){renderAccount();renderAdminAuth();const sec=document.getElementById('mvReports');if(sec)renderReportsSection();}
+  // Refresh "Bildirimlerim" whenever the profile tab is opened.
+  const baseTab=showTab;showTab=function(n){baseTab.apply(this,arguments);if(n==='profile')renderAccount();};window.showTab=showTab;
+  document.addEventListener('mv-account',renderAll2);
+  document.addEventListener('mv-account-ready',renderAll2);
+  renderAll2();
 })();
 </script>
 </body>

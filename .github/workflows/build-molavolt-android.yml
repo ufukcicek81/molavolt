@@ -6,6 +6,8 @@ on:
       - 'android-release/**'
       - '.github/workflows/build-molavolt-android.yml'
       - 'icon-192.png'
+      - 'icon-512.png'
+      - 'splash-logo.png'
 permissions:
   contents: read
 jobs:

@@ -1,0 +1,59 @@
+rules_version = '2';
+
+// MolaVolt Firestore rules.
+// Paste into Firebase Console > Firestore Database > Rules and publish.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // The only account allowed to change station data and sponsors (admin panel, signed in with Google).
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email == 'ufuk8790@gmail.com'
+        && request.auth.token.email_verified == true;
+    }
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // EPDK station snapshot and sponsors: everyone reads, only the admin writes.
+    match /molavolt/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /molavoltEpdkChunks/{chunkId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Offer codes: customers create them without an account and confirm them through links.
+    // Only the admin may list all codes (reports) or delete them.
+    match /molavoltCoupons/{code} {
+      allow get: if true;
+      allow list: if isAdmin();
+      allow create, update: if true;
+      allow delete: if isAdmin();
+    }
+
+    // Station status reports ("Çalışıyor / Arızalı / Dolu") and short comments.
+    match /stationReports/{reportId} {
+      allow read: if true;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['stationKey', 'stationName', 'brand', 'status', 'comment', 'uid', 'userName', 'createdAt'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status in ['working', 'broken', 'busy']
+        && request.resource.data.stationKey is string
+        && request.resource.data.stationKey.size() > 0
+        && request.resource.data.stationKey.size() <= 300
+        && request.resource.data.comment is string
+        && request.resource.data.comment.size() <= 280
+        && request.resource.data.createdAt == request.time;
+      allow update: if false;
+      allow delete: if signedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+    }
+
+    // Per-user data (favorite stations and brands), private to that user.
+    match /users/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+  }
+}
