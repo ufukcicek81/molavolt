@@ -1,0 +1,25 @@
+name: EPDK probe (temporary)
+on:
+  push:
+    branches: [claude/app-analysis-improvements-9n8r2x]
+    paths: ['.github/workflows/epdk-probe.yml','tools/epdk-probe.mjs']
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: MolaVolt API
+        run: |
+          curl -sS -m 240 -o vercel.json -w 'HTTP %{http_code} %{size_download}B %{time_total}s\n' https://molavolt.vercel.app/api/epdk || true
+          node tools/epdk-probe.mjs vercel.json || true
+      - name: EPDK direct (GET with JSON body, as the API does)
+        run: |
+          curl -sS -m 120 -X GET -H 'Content-Type: application/json' -H 'Accept: application/json' --data '{}' -o epdk.json -w 'HTTP %{http_code} %{size_download}B %{time_total}s\n' https://apigateway.epdk.gov.tr/sarjIstasyonlari/ || true
+          node tools/epdk-probe.mjs epdk.json || true
+      - name: EPDK related endpoints
+        run: |
+          for path in sarjIstasyonlari/soketler sarjIstasyonlari/soketDurum sarjSoketleri soketDurumlari sarjIstasyonlari/v2; do
+            printf '%s: ' "$path"; curl -sS -m 40 -X GET -H 'Content-Type: application/json' --data '{}' -o /tmp/r -w '%{http_code} %{size_download}B\n' "https://apigateway.epdk.gov.tr/$path/" || true; head -c 300 /tmp/r; echo; done
