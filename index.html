@@ -915,7 +915,7 @@ html.mv-admin-start .adminOnly{
       </section>
     </div>
 
-    <div class="tab" id="tab-favorites"><section class="section"><h3>Favoriler</h3><div class="cards" id="favCards"></div></section></div>
+    <div class="tab" id="tab-favorites"><section class="section"><h3>Favori istasyonlar</h3><p class="muted" id="favSummary">Sık kullandığın istasyonları ☆ ile kaydet.</p><div class="cards" id="favCards"></div></section></div>
     <div class="tab" id="tab-report"><section class="section"><h3>Eksik istasyon bildir</h3><p class="muted">Görünmeyen şarj noktasını bize gönder</p><div class="panel"><a class="routeBtn" style="display:block;padding:14px" href="https://wa.me/905327664404?text=MolaVolt%20eksik%20%C5%9Farj%20istasyonu%20bildirimi:%0A%C4%B0stasyon%20ad%C4%B1:%0AMarka:%0AKonum%20linki:%0ANot:" target="_blank" rel="noopener">WhatsApp ile bildir</a></div></section></div>
     <div class="tab" id="tab-profile"><section class="section"><h3>Profil</h3><p class="muted">MolaVolt</p><div class="panel"><b>MolaVolt</b><p class="muted">Yakındaki şarj istasyonlarını bul, haritada gör ve yol tarifini hemen al.</p></div><div class="panel" style="margin-top:12px"><h3 style="font-size:18px">Destek</h3><p class="muted">Öneri, hata bildirimi veya destek için bize ulaş.</p><a class="routeBtn" style="display:block;text-align:center;margin-top:8px" href="https://wa.me/905327664404?text=MolaVolt%20destek%20talebi:%20" target="_blank" rel="noopener">WhatsApp destek</a></div><div class="panel" style="margin-top:12px"><h3 style="font-size:18px">Fırsat kodlarım</h3><p class="muted">Kullandığın fırsatı buradan onaylayabilirsin.</p><div id="myCouponCards"></div></div><div class="profileQuick"><button class="secondaryBtn" onclick="showTab('favorites')">♡ Favoriler</button><button class="secondaryBtn" onclick="showTab('report')">⚑ İstasyon bildir</button></div></section></div>
   </main>
@@ -1001,6 +1001,7 @@ html.mv-admin-start .adminOnly{
   <button class="navItem active" id="nav-home" onclick="showTab('home')"><span class="navIcon"><svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5"/><path d="M9.5 20v-6h5v6"/></svg></span><span>Ana</span></button>
   <button class="navItem" id="nav-stations" onclick="showTab('stations')"><span class="navIcon"><svg viewBox="0 0 24 24"><path d="M12 21s6-5.4 6-11a6 6 0 1 0-12 0c0 5.6 6 11 6 11Z"/><circle cx="12" cy="10" r="2.5"/></svg></span><span>İstasyon</span></button>
   <button class="navItem" id="nav-route" onclick="showTab('route')"><span class="navIcon"><svg viewBox="0 0 24 24"><path d="M9 18H5a3 3 0 0 1 0-6h14a3 3 0 0 0 0-6h-4"/><path d="M9 14l3 4-3 4"/><path d="M15 10l-3-4 3-4"/></svg></span><span>Rota</span></button>
+  <button class="navItem" id="nav-favorites" onclick="showTab('favorites')"><span class="navIcon"><svg viewBox="0 0 24 24"><path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9Z"/></svg></span><span>Favoriler</span></button>
   <button class="navItem" id="nav-profile" onclick="showTab('profile')"><span class="navIcon"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></span><span>Profil</span></button>
 </nav>
 <div class="modal" id="mapModal"><div class="sheet"><button class="close" onclick="closeStationMap()">×</button><h2 id="mapModalTitle">Haritada gör</h2><p class="muted" id="mapModalText">İstasyon konumu</p><div class="mapSheetBody"><div id="stationMap"></div></div><div class="cardActions"><button class="secondaryBtn" onclick="closeStationMap()">Kapat</button><a class="routeBtn" id="mapModalRoute" href="#" target="_blank" rel="noopener">Yol tarifi</a></div></div></div>
@@ -5804,7 +5805,7 @@ if('serviceWorker' in navigator && (location.protocol==='https:' || location.hos
 html,body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
 body[data-tab="route"] .mvMainSearch,body[data-tab="route"] .mvSearchMessage,body[data-tab="route"] .mvBrandBar,body[data-tab="route"] #brandChips,body[data-tab="route"] #availabilityFilters,body[data-tab="route"] #mvAvailabilityNotice,
 body[data-tab="profile"] .mvMainSearch,body[data-tab="profile"] .mvSearchMessage,body[data-tab="profile"] .mvBrandBar,body[data-tab="profile"] #brandChips,body[data-tab="profile"] #availabilityFilters,body[data-tab="profile"] #mvAvailabilityNotice,
-body[data-tab="favorites"] .mvBrandBar,body[data-tab="favorites"] #availabilityFilters,body[data-tab="report"] .mvBrandBar,body[data-tab="report"] #availabilityFilters{display:none!important}
+body[data-tab="favorites"] .mvMainSearch,body[data-tab="favorites"] .mvSearchMessage,body[data-tab="favorites"] .mvBrandBar,body[data-tab="favorites"] #brandChips,body[data-tab="favorites"] #availabilityFilters,body[data-tab="favorites"] #mvAvailabilityNotice,body[data-tab="report"] .mvBrandBar,body[data-tab="report"] #availabilityFilters{display:none!important}
 .mvBrandMore{display:none!important}
 .mvCard{position:relative;margin:0 0 12px;padding:16px;border:1px solid var(--line);border-radius:20px;background:linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.025));cursor:pointer;transition:border-color .15s,background .15s}
 .mvCard:active{background:rgba(255,255,255,.07)}
@@ -5860,6 +5861,14 @@ body[data-tab="favorites"] .mvBrandBar,body[data-tab="favorites"] #availabilityF
 .mvOfferCard h4{margin:0;font-size:14px}
 .mvOfferCard p{margin:3px 0 0;font-size:12px;color:var(--muted)}
 .mvOfferCard .mvBtn{margin-left:auto}
+body:not(.admin-mode) .bottomNav.customerOnly{grid-template-columns:repeat(5,minmax(0,1fr))!important}
+.mvFavBtn{flex:0 0 36px;width:36px;height:36px;margin:-4px -6px 0 0;display:grid;place-items:center;border:0;border-radius:50%;background:transparent;color:var(--muted);font-size:21px;line-height:1;cursor:pointer;font-family:inherit}
+.mvFavBtn:hover{background:rgba(255,255,255,.06)}
+.mvFavBtn.on{color:var(--yellow)}
+.mvBtn.fav.on{color:var(--yellow);border-color:rgba(255,224,129,.4)}
+.mvFavEmpty{padding:28px 18px;text-align:center;border:1px dashed rgba(255,255,255,.16);border-radius:20px;color:var(--muted);font-size:14px;line-height:1.5}
+.mvFavEmpty b{display:block;font-size:30px;color:var(--yellow);margin-bottom:6px}
+.mvFavOffline{font-size:12px;color:var(--muted);margin-top:8px}
 @media(max-width:360px){.mvCardFoot{flex-wrap:wrap}.mvCardActions{width:100%;margin-left:0}.mvCardActions .mvBtn{flex:1}}
 </style>
 <script id="mv-ui-pro-js-1013">
@@ -5880,6 +5889,48 @@ body[data-tab="favorites"] .mvBrandBar,body[data-tab="favorites"] #availabilityF
   function ago(ts){const m=Math.round((Date.now()-Number(ts))/60000);return m<1?'az önce':m+' dk önce'}
   function kwText(s){const kw=maxKw(s);return Number.isFinite(kw)?kw+' kW'+(kw>=50?' DC':' AC'):''}
 
+  // Favorites: unlimited, stored on the device. Station ids change when EPDK data reloads,
+  // so a favorite is keyed by name + coordinates and keeps a snapshot for when it is missing from the list.
+  const FAV_KEY='molavolt_favorites_v1';
+  function favKey(s){return [String(s.name||''),Number(s.lat).toFixed(5),Number(s.lon).toFixed(5)].join('|')}
+  function favId(key){let h=0;for(const ch of key)h=(h*31+ch.charCodeAt(0))>>>0;return 'fav-'+h.toString(36)}
+  function readFavs(){try{const v=JSON.parse(localStorage.getItem(FAV_KEY)||'[]');return Array.isArray(v)?v.filter(f=>f&&f.key):[]}catch(_){return []}}
+  function writeFavs(list){try{localStorage.setItem(FAV_KEY,JSON.stringify(list));return true}catch(_){return false}}
+  function isFav(s){const k=favKey(s);return readFavs().some(f=>f.key===k)}
+  function favStations(){
+    const byKey=new Map((stations||[]).map(x=>[favKey(x),x]));
+    return readFavs().map(f=>{
+      const live=byKey.get(f.key);
+      if(live)return live;
+      const snap=Object.assign({},f.station||{},{id:favId(f.key),mvFavOffline:true});
+      snap.distance=Number.isFinite(Number(snap.lat))&&Number.isFinite(Number(snap.lon))?km(userPos.lat,userPos.lon,Number(snap.lat),Number(snap.lon)):null;
+      return snap;
+    });
+  }
+  function favButton(s){const on=isFav(s);return `<button type="button" class="mvFavBtn ${on?'on':''}" aria-pressed="${on}" aria-label="${on?'Favorilerden çıkar':'Favorilere ekle'}" onclick="mvToggleFav('${e(s.id)}',event)">${on?'★':'☆'}</button>`}
+  window.mvToggleFav=function(id,ev,fromDetail){
+    if(ev)ev.stopPropagation();
+    const s=(stations||[]).find(x=>x.id===id)||favStations().find(x=>x.id===id);
+    if(!s)return;
+    const k=favKey(s),list=readFavs(),i=list.findIndex(f=>f.key===k);
+    let added=false;
+    if(i>=0)list.splice(i,1);
+    else{
+      const snap={};['name','brand','operator','address','lat','lon','power','sockets','price','priceText'].forEach(f=>{if(s[f]!==undefined)snap[f]=s[f]});
+      list.unshift({key:k,addedAt:Date.now(),station:snap});added=true;
+    }
+    if(!writeFavs(list)){alert('Favori kaydedilemedi: cihaz depolama alanı dolu veya kapalı.');return;}
+    if(typeof routeToast==='function')routeToast(added?'Favorilere eklendi':'Favorilerden çıkarıldı');
+    renderCards();renderFavs();
+    if(fromDetail)openDetail(id);
+  };
+  renderFavs=function(){
+    const box=$('favCards');if(!box)return;
+    const list=favStations().sort((a,b)=>distKey(a)-distKey(b)||0),sum=$('favSummary');
+    if(sum)sum.textContent=list.length?list.length+' favori istasyon · en yakından uzağa':'Sık kullandığın istasyonları ☆ ile kaydet.';
+    box.innerHTML=list.length?list.map(stationCard).join(''):'<div class="mvFavEmpty"><b>☆</b>Henüz favori istasyonun yok.<br>İstasyon kartındaki yıldıza dokunarak istediğin kadar istasyon ekleyebilirsin.</div>';
+  };
+
   stationCard=function(s){
     const a=availability(s),kw=kwText(s),sock=socketText(s),price=priceOf(s),offers=typeof offerCount==='function'?offerCount(s.id):0,id=e(s.id);
     return `<article class="mvCard" onclick="openDetail('${id}')">
@@ -5887,7 +5938,9 @@ body[data-tab="favorites"] .mvBrandBar,body[data-tab="favorites"] #availabilityF
         <span class="mvBrandMark" style="--h:${brandHue(s.brand)}" aria-hidden="true">${e(brandMark(s.brand))}</span>
         <div class="mvCardTitle"><h4>${e(displayName(s))}</h4><p><b>${e(s.brand||'Diğer')}</b> · ${e(s.address||'Adres bilgisi yok')}</p></div>
         <div class="mvDist"><b>${e(distText(s).replace(' km',''))}</b><small>km</small></div>
+        ${favButton(s)}
       </div>
+      ${s.mvFavOffline?'<div class="mvFavOffline">Güncel listede bulunamadı; kayıtlı bilgiler gösteriliyor.</div>':''}
       <div class="mvCardMeta">
         <span class="mvPill ${a.key}">${a.key==='none'?'':'<span class="dot"></span>'}${e(a.label)}</span>
         ${kw?`<span class="mvPill">⚡ ${e(kw)}</span>`:''}
@@ -5897,7 +5950,7 @@ body[data-tab="favorites"] .mvBrandBar,body[data-tab="favorites"] #availabilityF
         ${price?`<span class="mvPrice">${e(price.text)}${price.est?'<small>tahmini tarife</small>':''}</span>`:'<span class="mvPrice"><small>Fiyat bilgisi yok</small></span>'}
         ${offers?`<span class="mvOffer">🎁 ${offers} fırsat</span>`:''}
         <div class="mvCardActions">
-          <button type="button" class="mvBtn ghost" onclick="openStationMap('${id}',event)">Harita</button>
+          ${s.mvFavOffline?'':`<button type="button" class="mvBtn ghost" onclick="openStationMap('${id}',event)">Harita</button>`}
           <a class="mvBtn primary" href="${e(routeUrl(s))}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Yol tarifi</a>
         </div>
       </div>
@@ -5905,7 +5958,7 @@ body[data-tab="favorites"] .mvBrandBar,body[data-tab="favorites"] #availabilityF
   };
 
   openDetail=function(id){
-    const s=stations.find(x=>x.id===id),box=$('detailContent');
+    const s=stations.find(x=>x.id===id)||favStations().find(x=>x.id===id),box=$('detailContent');
     if(!s||!box)return;
     const a=availability(s),kw=kwText(s),sock=socketText(s),price=priceOf(s),c=a.counts||{};
     const total=Number(c.total)||0,bars=total>0&&total<=12?'<div class="mvSockets">'+['ok','busy','off'].flatMap(k=>Array(Math.max(0,Number(c[k])||0)).fill(`<i class="${k}"></i>`)).concat(Array(Math.max(0,total-(Number(c.ok)||0)-(Number(c.busy)||0)-(Number(c.off)||0))).fill('<i></i>')).join('')+'</div>':'';
@@ -5928,8 +5981,9 @@ body[data-tab="favorites"] .mvBrandBar,body[data-tab="favorites"] #availabilityF
       </div>
       <div class="mvSheetActions">
         <a class="mvBtn primary block" href="${e(routeUrl(s))}" target="_blank" rel="noopener">Yol tarifi al</a>
-        <button type="button" class="mvBtn ghost block" onclick="openStationMap('${e(s.id)}',event)">Haritada gör</button>
+        ${s.mvFavOffline?'':`<button type="button" class="mvBtn ghost block" onclick="openStationMap('${e(s.id)}',event)">Haritada gör</button>`}
       </div>
+      <button type="button" class="mvBtn ghost block fav ${isFav(s)?'on':''}" style="width:100%;margin-top:8px" onclick="mvToggleFav('${e(s.id)}',event,true)">${isFav(s)?'★ Favorilerden çıkar':'☆ Favorilere ekle'}</button>
       <div class="mvSoon">⚡<div><b>MolaVolt ile şarj başlatma</b><br>Operatör bağlantıları tamamlanınca bu ekrandan ödeme yapabileceksin.</div></div>
       ${offerHtml?`<h3 class="mvSectionTitle">Şarj molası fırsatları</h3>${offerHtml}`:''}
     </div>`;
@@ -5940,7 +5994,7 @@ body[data-tab="favorites"] .mvBrandBar,body[data-tab="favorites"] #availabilityF
   showTab=function(name){baseShowTab(name);document.body.dataset.tab=name;};
   window.showTab=showTab;
   document.body.dataset.tab=typeof activeCustomerTab==='string'&&activeCustomerTab?activeCustomerTab:'home';
-  if(typeof renderCards==='function')try{renderCards()}catch(err){console.warn(err)}
+  if(typeof renderCards==='function')try{renderCards();renderFavs()}catch(err){console.warn(err)}
 })();
 </script>
 </body>
