@@ -934,7 +934,7 @@ html.mv-admin-start .adminOnly{
               <input id="rp_charge_target" type="hidden" value="80">
             </div>
 
-            <div class="mvRouteHint">2. Araç bilgilerini kontrol et · 3. Rotayı hesapla. Mesafe ve maliyet tahminidir.</div><button class="primaryBtn routePrimaryBig" onclick="planEvRoute()">⚡ Rotamı hesapla</button>
+            <div class="mvRouteBrandNote" id="mvRouteBrandNote"></div><div class="mvRouteHint">2. Araç bilgilerini kontrol et · 3. Rotayı hesapla. Mesafe ve maliyet tahminidir.</div><button class="primaryBtn routePrimaryBig" onclick="planEvRoute()">⚡ Rotamı hesapla</button>
           </div>
         </div>
 
@@ -942,7 +942,7 @@ html.mv-admin-start .adminOnly{
       </section>
     </div>
 
-    <div class="tab" id="tab-favorites"><section class="section"><h3>Favori istasyonlar</h3><p class="muted" id="favSummary">Sık kullandığın istasyonları ☆ ile kaydet.</p><div class="cards" id="favCards"></div></section></div>
+    <div class="tab" id="tab-favorites"><section class="section"><h3>Favori markalar</h3><p class="muted">Rota planlarken yalnızca seçtiğin markaların istasyonlarında mola verilir.</p><div id="favBrands"></div></section><section class="section"><h3>Favori istasyonlar</h3><p class="muted" id="favSummary">Sık kullandığın istasyonları ☆ ile kaydet.</p><div class="cards" id="favCards"></div></section></div>
     <div class="tab" id="tab-report"><section class="section"><h3>Eksik istasyon bildir</h3><p class="muted">Görünmeyen şarj noktasını bize gönder</p><div class="panel"><a class="routeBtn" style="display:block;padding:14px" href="https://wa.me/905327664404?text=MolaVolt%20eksik%20%C5%9Farj%20istasyonu%20bildirimi:%0A%C4%B0stasyon%20ad%C4%B1:%0AMarka:%0AKonum%20linki:%0ANot:" target="_blank" rel="noopener">WhatsApp ile bildir</a></div></section></div>
     <div class="tab" id="tab-profile"><section class="section"><h3>Profil</h3><p class="muted">MolaVolt</p><div class="panel"><b>MolaVolt</b><p class="muted">Yakındaki şarj istasyonlarını bul, haritada gör ve yol tarifini hemen al.</p></div><div class="panel" style="margin-top:12px"><h3 style="font-size:18px">Destek</h3><p class="muted">Öneri, hata bildirimi veya destek için bize ulaş.</p><a class="routeBtn" style="display:block;text-align:center;margin-top:8px" href="https://wa.me/905327664404?text=MolaVolt%20destek%20talebi:%20" target="_blank" rel="noopener">WhatsApp destek</a></div><div class="panel" style="margin-top:12px"><h3 style="font-size:18px">Fırsat kodlarım</h3><p class="muted">Kullandığın fırsatı buradan onaylayabilirsin.</p><div id="myCouponCards"></div></div><div class="profileQuick"><button class="secondaryBtn" onclick="showTab('favorites')">♡ Favoriler</button><button class="secondaryBtn" onclick="showTab('report')">⚑ İstasyon bildir</button></div></section></div>
   </main>
@@ -4312,7 +4312,7 @@ window.addEventListener('load',()=>{
   }
   async function preCandidates(dest){
     const road=await baseRoute(dest); const baseKm=road.distanceKm||hKm(userPos.lat,userPos.lon,dest.lat,dest.lon)*1.18;
-    const raw=(stations||[]).filter(s=>Number.isFinite(Number(s.lat))&&Number.isFinite(Number(s.lon))).map(s=>{const m=projection(road.points,s); return {...s,routeDeviation:m.distance,routeProgress:m.progress,alongKm:m.alongKm,routeKw:stKw(s)};}).filter(s=>s.routeProgress>0.02&&s.routeProgress<0.985);
+    const raw=(typeof window.mvRouteStationPool==='function'?window.mvRouteStationPool(stations||[]):(stations||[])).filter(s=>Number.isFinite(Number(s.lat))&&Number.isFinite(Number(s.lon))).map(s=>{const m=projection(road.points,s); return {...s,routeDeviation:m.distance,routeProgress:m.progress,alongKm:m.alongKm,routeKw:stKw(s)};}).filter(s=>s.routeProgress>0.02&&s.routeProgress<0.985);
     const corridors=road.ok?[0.8,1.2,2,3,5,8]:[4,8,12,18]; let list=[],used=corridors[0];
     for(const c of corridors){const l=raw.filter(s=>s.routeDeviation<=c).sort((a,b)=>a.routeProgress-b.routeProgress); if(l.length>list.length){list=l;used=c;} if(l.length>=20){list=l;used=c;break;}}
     return {list,usedCorridor:used,baseKm,source:road.source};
@@ -4444,7 +4444,7 @@ window.addEventListener('load',()=>{
   }
   async function preCandidates(dest,reachKm,lowMode){
     const road=await baseRoute(dest); const start={lat:num(userPos?.lat,40.840621),lon:num(userPos?.lon,31.152219)}; const baseKm=road.distanceKm||hKm(start.lat,start.lon,dest.lat,dest.lon)*1.18;
-    const raw=(stations||[]).filter(s=>Number.isFinite(Number(s.lat))&&Number.isFinite(Number(s.lon))).map(s=>{const m=projection(road.points,s); const direct=hKm(start.lat,start.lon,Number(s.lat),Number(s.lon)); return {...s,routeDeviation:m.distance,routeProgress:m.progress,alongKm:m.alongKm,routeKw:stKw(s),originDriveKm:direct*1.22};});
+    const raw=(typeof window.mvRouteStationPool==='function'?window.mvRouteStationPool(stations||[]):(stations||[])).filter(s=>Number.isFinite(Number(s.lat))&&Number.isFinite(Number(s.lon))).map(s=>{const m=projection(road.points,s); const direct=hKm(start.lat,start.lon,Number(s.lat),Number(s.lon)); return {...s,routeDeviation:m.distance,routeProgress:m.progress,alongKm:m.alongKm,routeKw:stKw(s),originDriveKm:direct*1.22};});
     let list=[],used=0;
     if(lowMode){
       const emergencyReach=Math.max(5,reachKm*1.75+4);
@@ -4759,7 +4759,7 @@ window.addEventListener('load',()=>{
   }
   async function preCandidates(dest,reachKm,lowMode){
     const road=await baseRoute(dest); const start={lat:num(userPos?.lat,40.840621),lon:num(userPos?.lon,31.152219)}; const baseKm=road.distanceKm||hKm(start.lat,start.lon,dest.lat,dest.lon)*1.18;
-    const raw=(stations||[]).filter(s=>Number.isFinite(Number(s.lat))&&Number.isFinite(Number(s.lon))).map(s=>{const m=projection(road.points,s); const direct=hKm(start.lat,start.lon,Number(s.lat),Number(s.lon)); return {...s,routeDeviation:m.distance,routeProgress:m.progress,alongKm:m.alongKm,routeKw:stKw(s),originDriveKm:direct*1.22};});
+    const raw=(typeof window.mvRouteStationPool==='function'?window.mvRouteStationPool(stations||[]):(stations||[])).filter(s=>Number.isFinite(Number(s.lat))&&Number.isFinite(Number(s.lon))).map(s=>{const m=projection(road.points,s); const direct=hKm(start.lat,start.lon,Number(s.lat),Number(s.lon)); return {...s,routeDeviation:m.distance,routeProgress:m.progress,alongKm:m.alongKm,routeKw:stKw(s),originDriveKm:direct*1.22};});
     let list=[],used=0;
     if(lowMode){
       const emergencyReach=Math.max(5,reachKm*1.75+4);
@@ -5155,10 +5155,11 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
     });
     return loading;
   }
+  function isFavForMap(s){try{return typeof window.mvIsFavoriteForMap==='function'&&window.mvIsFavoriteForMap(s)}catch(_){return false}}
   function markerIcon(s){
-    var t=priceText(s),label='⚡ '+(t||'—');
-    var color=Number(String(s.power||'').match(/\d+(?:[.,]\d+)?/)?.[0]?.replace(',','.')||0)>=50?'#39aaff':'#35ef8d';
-    var svg='<svg xmlns="http://www.w3.org/2000/svg" width="118" height="34" viewBox="0 0 118 34"><rect x="2" y="2" width="114" height="29" rx="14" fill="#07111d" stroke="'+color+'" stroke-width="2"/><text x="59" y="22" font-size="12" font-family="Arial,sans-serif" font-weight="bold" fill="'+color+'" text-anchor="middle">'+escMap(label)+'</text></svg>';
+    var fav=isFavForMap(s),t=priceText(s),label=(fav?'★ ':'⚡ ')+(t||'—');
+    var color=fav?'#ffd34d':(Number(String(s.power||'').match(/\d+(?:[.,]\d+)?/)?.[0]?.replace(',','.')||0)>=50?'#39aaff':'#35ef8d');
+    var svg='<svg xmlns="http://www.w3.org/2000/svg" width="118" height="34" viewBox="0 0 118 34"><rect x="2" y="2" width="114" height="29" rx="14" fill="'+(fav?'#2a2208':'#07111d')+'" stroke="'+color+'" stroke-width="'+(fav?3:2)+'"/><text x="59" y="22" font-size="12" font-family="Arial,sans-serif" font-weight="bold" fill="'+color+'" text-anchor="middle">'+escMap(label)+'</text></svg>';
     return {url:'data:image/svg+xml;charset=UTF-8,'+encodeURIComponent(svg),size:new google.maps.Size(118,34),scaledSize:new google.maps.Size(118,34),anchor:new google.maps.Point(59,17)};
   }
   function popupContent(s){
@@ -5197,7 +5198,7 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
         firstPaint=true;
       }
       var list=getVisibleStations();lastList=list;refreshControls(list);
-      var signature=(nearby?'near':'all')+'|'+list.length+'|'+list.map(function(s){return String(s.id||s.name)+':'+s.lat+':'+s.lon+':'+String(s.price||'')+':'+String(s.power||'')}).join('|');
+      var signature=(nearby?'near':'all')+'|'+list.length+'|'+list.map(function(s){return String(s.id||s.name)+':'+s.lat+':'+s.lon+':'+String(s.price||'')+':'+String(s.power||'')+':'+(isFavForMap(s)?1:0)}).join('|');
       if(signature!==lastSignature){
         lastSignature=signature;
         if(cluster){cluster.clearMarkers();cluster.setMap(null);cluster=null;}
@@ -5207,7 +5208,7 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
         list.forEach(function(s){
           var k=String(s.id||s.name)+'|'+s.lat+'|'+s.lon;
           if(unique.has(k))return;unique.add(k);
-          var m=new google.maps.Marker({position:{lat:Number(s.lat),lng:Number(s.lon)},title:s.name||'Şarj istasyonu',icon:markerIcon(s),optimized:true});
+          var fav=isFavForMap(s);var m=new google.maps.Marker({position:{lat:Number(s.lat),lng:Number(s.lon)},title:(fav?'★ Favori · ':'')+(s.name||'Şarj istasyonu'),icon:markerIcon(s),optimized:true,zIndex:fav?1000:1});
           m.addListener('click',function(){
             info.setContent(popupContent(s));
             info.open({map:map,anchor:m});
@@ -5948,9 +5949,15 @@ body:not(.admin-mode) .bottomNav.customerOnly{grid-template-columns:repeat(5,min
     }
     if(!writeFavs(list)){alert('Favori kaydedilemedi: cihaz depolama alanı dolu veya kapalı.');return;}
     if(typeof routeToast==='function')routeToast(added?'Favorilere eklendi':'Favorilerden çıkarıldı');
+    if(window.mvInvalidateMapFav)window.mvInvalidateMapFav();
     renderCards();renderFavs();
+    if(window.renderHomeStationMap)setTimeout(window.renderHomeStationMap,50);
     if(fromDetail)openDetail(id);
   };
+  window.mvFavStations=favStations;
+  window.mvIsFavStation=isFav;
+  window.mvFavStationKeys=()=>readFavs().map(f=>f.key);
+  window.mvFavKey=favKey;
   renderFavs=function(){
     const box=$('favCards');if(!box)return;
     const list=favStations().sort((a,b)=>distKey(a)-distKey(b)||0),sum=$('favSummary');
@@ -6075,6 +6082,142 @@ body:not(.admin-mode) .bottomNav.customerOnly{grid-template-columns:repeat(5,min
   window.showTab=showTab;
   document.body.dataset.tab=typeof activeCustomerTab==='string'&&activeCustomerTab?activeCustomerTab:'home';
   if(typeof renderCards==='function')try{renderCards();renderFavs()}catch(err){console.warn(err)}
+})();
+</script>
+
+<style id="mv-brands-1016">
+.mvBrandFavs{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 12px}
+.mvBrandFavs .mvChip{display:inline-flex;align-items:center;gap:8px;padding:8px 8px 8px 12px;border-radius:999px;background:rgba(255,224,129,.1);border:1px solid rgba(255,224,129,.35);color:var(--text);font-size:13px;font-weight:700}
+.mvBrandFavs .mvChip button{width:24px;height:24px;border-radius:50%;border:0;background:rgba(255,255,255,.1);color:var(--text);font-size:15px;line-height:1;cursor:pointer}
+.mvBrandFavs .none{font-size:13px;color:var(--muted)}
+.mvBrandSearch{width:100%;height:44px;padding:0 14px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.05);color:var(--text);font-size:14px;font-family:inherit}
+.mvBrandList{margin-top:8px;border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.mvBrandRow{display:flex;align-items:center;gap:10px;width:100%;padding:11px 12px;border:0;border-bottom:1px solid rgba(255,255,255,.06);background:transparent;color:var(--text);font-size:14px;text-align:left;cursor:pointer;font-family:inherit}
+.mvBrandRow:last-child{border-bottom:0}
+.mvBrandRow .star{font-size:19px;color:var(--muted);width:22px}
+.mvBrandRow.on .star{color:var(--yellow)}
+.mvBrandRow .name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:650}
+.mvBrandRow .count{font-size:12px;color:var(--muted)}
+.mvBrandMoreBtn{width:100%;margin-top:8px}
+.mvFavGroup{margin:16px 0 8px;font-size:13px;font-weight:800;letter-spacing:.3px;color:var(--muted);text-transform:uppercase}
+.mvRouteBrandNote{display:flex;align-items:center;gap:10px;margin:12px 0 0;padding:11px 12px;border-radius:14px;border:1px solid rgba(255,224,129,.3);background:rgba(255,224,129,.06);font-size:12.5px;line-height:1.45;color:#f1e3bd}
+.mvRouteBrandNote b{color:var(--text)}
+.mvRouteBrandNote button{margin-left:auto;flex:0 0 auto}
+.mvRouteBrandNote:empty{display:none}
+</style>
+<script id="mv-brands-js-1016">
+/* MV_BRANDS_1016: every station carries a real brand (no "Diğer"); favorite brands drive route stops. */
+(function(){
+  const e=v=>esc(String(v??''));
+  // Words that make up legal company titles; the brand is what precedes them ("ZES DİJİTAL ŞARJ ... A.Ş." -> "ZES").
+  const LEGAL=new Set('ANONİM ŞİRKETİ ŞİRKET ŞTİ A.Ş AŞ A.Ş. LİMİTED LTD SANAYİ SAN TİCARET TİC VE ENERJİ ELEKTRİK ELEKTRİKLİ ARAÇ ARAÇLAR ARAÇLARI ŞARJ AĞI İSTASYON İSTASYONLARI İŞLETMECİLİĞİ HİZMETLERİ HİZMET DİJİTAL YATIRIM YATIRIMLARI TEKNOLOJİ TEKNOLOJİLERİ ÜRETİM DAĞITIM PAZARLAMA İNŞAAT OTOMOTİV'.split(' '));
+  const up=v=>String(v||'').toLocaleUpperCase('tr-TR');
+  function brandFromTitle(title){
+    const words=String(title||'').replace(/\s+/g,' ').trim().split(' ').filter(Boolean);
+    const out=[];
+    for(const w of words){const k=up(w).replace(/[.,]+$/,'');if(LEGAL.has(k)||LEGAL.has(k+'.')){if(out.length)break;continue;}out.push(w);if(out.length>=3)break;}
+    return out.join(' ');
+  }
+  function missing(b){const t=String(b||'').trim();return !t||/^(diğer|diger|other|bilinmiyor|-)(\s|$)/i.test(t)}
+  function rawBrand(s){
+    // Older cached lists stored the legal title as the brand; shorten those too.
+    if(!missing(s.brand))return /ANON[İI]M|Ş[İI]RKET|A\.\s?Ş|L[İI]M[İI]TED|\bLTD|ŞT[İI]/i.test(s.brand)?(normBrand(brandFromTitle(s.brand))||String(s.brand).trim()):String(s.brand).trim();
+    const fromTitle=brandFromTitle(s.operator||s.operatorName);
+    if(fromTitle)return normBrand(fromTitle);
+    return String(s.name||'Şarj istasyonu').split(/[-–·,]/)[0].trim()||'Şarj istasyonu';
+  }
+  // 'MULTI FORCE' and 'Multi Force' must match: Turkish lower-casing turns I into ı, so fold ı to i.
+  const keyOf=b=>String(b||'').toLocaleLowerCase('tr-TR').replace(/ı/g,'i').replace(/[^0-9a-zçğöşü]+/g,'');
+  function canonicalize(list){
+    const variants=new Map();
+    list.forEach(s=>{const b=rawBrand(s),k=keyOf(b);if(!variants.has(k))variants.set(k,new Map());const m=variants.get(k);m.set(b,(m.get(b)||0)+1);s.__b=b;});
+    const pickName=new Map();
+    variants.forEach((m,k)=>pickName.set(k,[...m].sort((a,b)=>b[1]-a[1])[0][0]));
+    list.forEach(s=>{s.brand=pickName.get(keyOf(s.__b))||s.__b;delete s.__b;});
+    return list;
+  }
+  window.mvCanonicalBrands=canonicalize;
+  const baseBuild=buildStations;
+  buildStations=function(){const r=baseBuild.apply(this,arguments);canonicalize(stations||[]);return r;};
+  window.buildStations=buildStations;
+
+  // ---- favorite brands ----
+  const KEY='molavolt_fav_brands_v1';
+  function favBrands(){try{const v=JSON.parse(localStorage.getItem(KEY)||'[]');return Array.isArray(v)?v.filter(Boolean):[]}catch(_){return []}}
+  function setFavBrands(list){try{localStorage.setItem(KEY,JSON.stringify(list))}catch(_){alert('Favori markalar kaydedilemedi: cihaz depolama alanı dolu veya kapalı.')}}
+  function isFavBrand(b){const k=keyOf(b);return favBrands().some(x=>keyOf(x)===k)}
+  window.mvFavBrands=favBrands;
+  // Map: favorite stations and every station of a favorite brand get the gold ★ marker.
+  // Read the favorite lists once per map render, not once per marker (thousands of stations).
+  let mapFav=null;
+  window.mvInvalidateMapFav=function(){mapFav=null};
+  window.mvIsFavoriteForMap=function(s){
+    if(!mapFav||Date.now()-mapFav.at>1000)mapFav={at:Date.now(),brands:new Set(favBrands().map(keyOf)),stations:new Set(typeof window.mvFavStationKeys==='function'?window.mvFavStationKeys():[])};
+    return mapFav.brands.has(keyOf(s.brand))||(typeof window.mvFavKey==='function'&&mapFav.stations.has(window.mvFavKey(s)));
+  };
+  window.mvToggleFavBrand=function(b){
+    const k=keyOf(b),list=favBrands(),i=list.findIndex(x=>keyOf(x)===k);
+    if(i>=0)list.splice(i,1);else list.push(b);
+    setFavBrands(list);
+    window.mvInvalidateMapFav();
+    if(typeof routeToast==='function')routeToast(i>=0?b+' favorilerden çıkarıldı':b+' favori markalara eklendi');
+    renderBrandFavs();renderRouteBrandNote();renderFavs();
+    if(window.renderHomeStationMap)setTimeout(window.renderHomeStationMap,50);
+  };
+  // Route planner candidate pool: only favorite brands, when the user picked any.
+  window.mvRouteStationPool=function(list){
+    const fav=favBrands().map(keyOf);
+    if(!fav.length)return list;
+    return list.filter(s=>fav.includes(keyOf(s.brand)));
+  };
+  function brandCounts(){const m=new Map();(stations||[]).forEach(s=>{m.set(s.brand,(m.get(s.brand)||0)+1)});return [...m].sort((a,b)=>b[1]-a[1]||String(a[0]).localeCompare(String(b[0]),'tr'))}
+  let brandQuery='',showAll=false;
+  function renderBrandFavs(){
+    const box=document.getElementById('favBrands');if(!box)return;
+    const fav=favBrands(),counts=brandCounts(),q=keyOf(brandQuery);
+    const rows=counts.filter(([b])=>!q||keyOf(b).includes(q));
+    const shown=q||showAll?rows:rows.slice(0,15);
+    box.innerHTML=`<div class="mvBrandFavs">${fav.length?fav.map(b=>`<span class="mvChip">★ ${e(b)}<button type="button" aria-label="${e(b)} favorilerden çıkar" data-brand="${e(b)}">×</button></span>`).join(''):'<span class="none">Henüz favori marka seçmedin; rota tüm markaları kullanır.</span>'}</div>
+      <input class="mvBrandSearch" id="mvBrandSearchInput" type="search" placeholder="Marka ara (${counts.length} marka)" value="${e(brandQuery)}" autocomplete="off">
+      <div class="mvBrandList">${shown.map(([b,c])=>`<button type="button" class="mvBrandRow ${isFavBrand(b)?'on':''}" data-brand="${e(b)}"><span class="star">${isFavBrand(b)?'★':'☆'}</span><span class="name">${e(b)}</span><span class="count">${c} istasyon</span></button>`).join('')||'<div class="mvBrandRow">Eşleşen marka yok</div>'}</div>
+      ${!q&&!showAll&&rows.length>shown.length?`<button type="button" class="mvBtn ghost mvBrandMoreBtn" id="mvBrandShowAll">Tüm markaları göster (${rows.length})</button>`:''}`;
+    box.querySelectorAll('[data-brand]').forEach(el=>el.addEventListener('click',()=>window.mvToggleFavBrand(el.dataset.brand)));
+    const input=document.getElementById('mvBrandSearchInput');
+    if(input)input.addEventListener('input',()=>{brandQuery=input.value;const pos=input.selectionStart;renderBrandFavs();const again=document.getElementById('mvBrandSearchInput');if(again){again.focus();try{again.setSelectionRange(pos,pos)}catch(_){}}});
+    const all=document.getElementById('mvBrandShowAll');if(all)all.addEventListener('click',()=>{showAll=true;renderBrandFavs()});
+  }
+  function renderRouteBrandNote(){
+    const el=document.getElementById('mvRouteBrandNote');if(!el)return;
+    const fav=favBrands();
+    el.innerHTML=fav.length
+      ?`<span>⭐</span><div>Molalar yalnızca favori markalarında: <b>${e(fav.join(', '))}</b></div><button type="button" class="mvBtn ghost" onclick="showTab('favorites')">Değiştir</button>`
+      :`<span>⭐</span><div>Molalar tüm markalardan seçilir. Sadece belirli markalarda durmak için favori marka seç.</div><button type="button" class="mvBtn ghost" onclick="showTab('favorites')">Marka seç</button>`;
+  }
+  // Favorite stations grouped by brand, under the brand picker.
+  const baseRenderFavs=renderFavs;
+  renderFavs=function(){
+    baseRenderFavs();renderBrandFavs();renderRouteBrandNote();
+    const box=document.getElementById('favCards');if(!box||typeof window.mvFavStations!=='function')return;
+    const list=window.mvFavStations();if(!list.length)return;
+    canonicalize(list.filter(s=>s.mvFavOffline));
+    const groups=new Map();
+    list.sort((a,b)=>distKey(a)-distKey(b)||0).forEach(s=>{const b=s.brand||'Şarj istasyonu';if(!groups.has(b))groups.set(b,[]);groups.get(b).push(s)});
+    box.innerHTML=[...groups].sort((a,b)=>String(a[0]).localeCompare(String(b[0]),'tr')).map(([b,arr])=>`<div class="mvFavGroup">${isFavBrand(b)?'★ ':''}${e(b)} · ${arr.length}</div>`+arr.map(stationCard).join('')).join('');
+  };
+  // After a route is planned, say which brands the stops were limited to.
+  const basePlan=window.planEvRoute;
+  if(typeof basePlan==='function'){
+    window.planEvRoute=async function(){
+      const r=await basePlan.apply(this,arguments);
+      const fav=favBrands(),out=document.getElementById('routeResult');
+      if(fav.length&&out&&out.innerHTML.trim()){
+        const n=window.mvRouteStationPool(stations||[]).length;
+        out.insertAdjacentHTML('afterbegin',`<div class="mvRouteBrandNote"><span>⭐</span><div>Duraklar yalnızca favori markalarından seçildi: <b>${e(fav.join(', '))}</b> (${n} istasyon).${n?'':' Bu markalarda istasyon bulunamadı; favori markalarını genişlet.'}</div></div>`);
+      }
+      return r;
+    };
+  }
+  try{buildStations();if(typeof renderChips==='function')renderChips();if(typeof applyFilters==='function')applyFilters();renderFavs();}catch(err){console.warn(err)}
 })();
 </script>
 </body>
