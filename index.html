@@ -855,7 +855,7 @@ html.mv-admin-start .adminOnly{
         <div class="homeMapHead"><div><h3 style="margin:0">Harita</h3><p class="muted" style="margin:4px 0 0">İstasyonları haritada hızlıca keşfet</p></div><button class="mapExpandBtn" type="button" onclick="openHomeMapFullscreen()">⛶ Tam ekran</button></div>
         <div class="homeMapWrap"><button class="mapFullscreenClose" type="button" onclick="closeHomeMapFullscreen()" aria-label="Haritayı kapat">×</button><div class="homeMapModeBtns"><button id="homeMapNearbyBtn" type="button" onclick="toggleHomeMapNearby()">Yakınım 100</button><button id="homeMapLayerBtn" type="button" onclick="toggleHomeMapLayer()">Uydu</button></div><div id="homeStationMap"></div><div class="homeMapLegend"><span><i class="mapLegendDot"></i> Yakındaki istasyonlar</span><span id="homeMapCount" hidden></span></div></div>
       </section>
-      <section class="section"><h3>Yakındaki istasyonlar</h3><p class="muted" id="countText" hidden></p><p class="muted" id="locStatus" style="font-size:13px;margin-top:4px">Yakındaki istasyonlar konumuna göre sıralanır.</p><div class="sorts"><button id="sortDistance" class="sort active" onclick="setSort('distance')">En yakın</button><button id="sortName" class="sort" onclick="setSort('name')">A-Z</button></div><div class="cards" id="homeCards"></div></section>
+      <section class="section"><h3>Yakındaki istasyonlar</h3><p class="muted" id="countText" hidden></p><p class="muted" id="locStatus" style="font-size:13px;margin-top:4px">Yakındaki istasyonlar konumuna göre sıralanır.</p><div class="sorts mvSorts" id="mvSorts"></div><div class="cards" id="homeCards"></div></section>
     </div>
     <div class="tab" id="tab-stations"><section class="section"><h3>İstasyonlar</h3><p class="muted">Marka seçerek veya arama yaparak filtreleyebilirsin.</p><div class="cards" id="stationCards"></div></section></div>
 
@@ -1162,7 +1162,7 @@ function toNum(v){if(typeof v==='number')return v;const m=String(v??'').replace(
 function pick(o,keys){for(const k of keys){if(o&&o[k]!==undefined&&o[k]!==null&&String(o[k]).trim()!=='')return o[k]}return''}
 function rowObject(row,cols){if(!Array.isArray(row))return row||{};const o={};(cols||[]).forEach((c,i)=>o[c]=row[i]);return o}
 function parseMaybe(v){if(typeof v!=='string')return v;const t=v.trim();if(!t)return v;try{return JSON.parse(t)}catch(e){}const a=t.indexOf('['),b=t.lastIndexOf(']');if(a>=0&&b>a){try{return JSON.parse(t.slice(a,b+1))}catch(e){}}const c=t.indexOf('{'),d=t.lastIndexOf('}');if(c>=0&&d>c){try{return JSON.parse(t.slice(c,d+1))}catch(e){}}return v}
-function socketSummary(soketler){let sockets='Soket bilgisi EPDK verisinde',power='kW bilgisi EPDK verisinde';try{soketler=parseMaybe(soketler);const arr=Array.isArray(soketler)?soketler:(soketler?[soketler]:[]);const sv=[],pv=[];arr.forEach(x=>{x=parseMaybe(x);if(!x)return;const st=pick(x,['soketTipi','soketTuru','socketType','connectorType','tip']);const pw=pick(x,['soketGucu','guc','kw','power']);if(st)sv.push(String(st));if(pw)pv.push(String(pw).includes('kW')?String(pw):String(pw)+' kW')});if(sv.length)sockets=[...new Set(sv)].join(' / ');if(pv.length)power=[...new Set(pv)].join(' / ')}catch(e){}return{sockets,power}}
+function socketSummary(soketler){let sockets='Soket bilgisi EPDK verisinde',power='kW bilgisi EPDK verisinde';try{soketler=parseMaybe(soketler);const arr=Array.isArray(soketler)?soketler:(soketler?[soketler]:[]);const sv=[],pv=[];arr.forEach(x=>{x=parseMaybe(x);if(!x)return;const rawSt=String(pick(x,['soketTuru','soketTipi','socketType','connectorType','tip'])||'');const st=/CHADEMO/i.test(rawSt)?'CHAdeMO':/CCS/i.test(rawSt)?'CCS2':/TYPE.?2|AC_TYPE/i.test(rawSt)?'Type 2':rawSt;const pw=pick(x,['soketGucu','guc','kw','power']);if(st)sv.push(String(st));if(pw)pv.push(String(pw).includes('kW')?String(pw):String(pw)+' kW')});if(sv.length)sockets=[...new Set(sv)].join(' / ');if(pv.length)power=[...new Set(pv)].join(' / ')}catch(e){}return{sockets,power}}
 function normalizeEpdkData(data){data=parseMaybe(data);let rows=[];const cols=data&&Array.isArray(data.columnNames)?data.columnNames:[];if(data&&typeof data.result==='string')data={...data,result:parseMaybe(data.result)};if(Array.isArray(data))rows=data;else if(data&&Array.isArray(data.result))rows=data.result.map(r=>rowObject(parseMaybe(r),cols));else if(data&&data.result&&typeof data.result==='object')rows=[data.result];else if(data&&data.data){const d=parseMaybe(data.data);if(Array.isArray(d))rows=d;else if(d&&Array.isArray(d.result))rows=d.result.map(r=>rowObject(parseMaybe(r),cols))}const out=[];rows.forEach((raw,idx)=>{raw=parseMaybe(raw);const r=rowObject(raw,cols);const lat=toNum(pick(r,['enlem','lat','latitude','koordinatx','koordinatX']));const lon=toNum(pick(r,['boylam','lon','lng','longitude','koordinaty','koordinatY']));if(!isFinite(lat)||!isFinite(lon))return;const sok=socketSummary(r.soketler);const name=pick(r,['sarjIstasyonuAdi','istasyonAdi','ad','name'])||'EPDK Şarj İstasyonu';const op=pick(r,['marka','sarjAgiIsletmecisiUnvan','sarjIstasyonuIsletmecisi','isletmeciUnvan'])||'Diğer';const address=pick(r,['adres','address'])||'Adres bilgisi yok';const no=pick(r,['sarjIstasyonuNo','istasyonNo','id'])||(idx+'-'+lat.toFixed(5)+'-'+lon.toFixed(5));out.push({id:'epdk-'+String(no).replace(/[^a-zA-Z0-9_.-]/g,'-')+'-'+idx,name:String(name),brand:normBrand(String(op)+' '+String(name)),type:pick(r,['hizmetSekli'])||'Şarj',status:'Açık',address:String(address),lat,lon,distance:km(userPos.lat,userPos.lon,lat,lon),sockets:sok.sockets,power:sok.power,source:'EPDK'})});const seen=new Set();return out.filter(s=>{const key=s.name+'|'+s.lat.toFixed(5)+'|'+s.lon.toFixed(5);if(seen.has(key))return false;seen.add(key);return true})}
 function clearLegacy(){clearLegacySilent();alert('Eski kayıtlar temizlendi.')}function clearLegacySilent(){LEGACY_KEYS.forEach(k=>localStorage.removeItem(k));Object.keys(localStorage).filter(k=>k.startsWith('molavolt_osm')).forEach(k=>localStorage.removeItem(k))}
 function buildStations(){stations=epdkStations().map(s=>({...s,distance:km(userPos.lat,userPos.lon,s.lat,s.lon)})).sort((a,b)=>distKey(a)-distKey(b)||0)}
@@ -5108,7 +5108,7 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
     return Number.isFinite(lat)&&Number.isFinite(lon)&&lat>=35&&lat<=43&&lon>=25&&lon<=46;
   }
   function getStations(){
-    try{return Array.isArray(stations)?stations.filter(validCoord):[]}catch(e){return []}
+    try{return Array.isArray(stations)?stations.filter(function(s){return validCoord(s)&&(typeof window.mvExtraFilter!=='function'||window.mvExtraFilter(s))}):[]}catch(e){return []}
   }
   function distKm(lat1,lon1,lat2,lon2){
     var rad=Math.PI/180, a=(lat2-lat1)*rad,b=(lon2-lon1)*rad;
@@ -5808,8 +5808,8 @@ if('serviceWorker' in navigator && (location.protocol==='https:' || location.hos
         (activeAvailability==='ok'&&s.availabilityKey==='ok'&&window.mvAvailabilityTrusted(s))||
         (activeAvailability==='busy'&&s.availabilityKey==='busy'&&window.mvAvailabilityTrusted(s))||
         (activeAvailability==='unknown'&&(!window.mvAvailabilityTrusted(s)||s.availabilityKey==='off'));
-      return isBrand&&matches(s,q)&&isAvailable;
-    }).sort((a,b)=>sortMode==='name'?String(a.name||'').localeCompare(String(b.name||''),'tr'):(distKey(a)-distKey(b)||0));
+      return isBrand&&matches(s,q)&&isAvailable&&(typeof window.mvExtraFilter!=='function'||window.mvExtraFilter(s));
+    }).sort((a,b)=>typeof window.mvSortCompare==='function'?window.mvSortCompare(a,b):sortMode==='name'?String(a.name||'').localeCompare(String(b.name||''),'tr'):(distKey(a)-distKey(b)||0));
     homeLimit=30;stationLimit=60;
     renderAll();updateSearchUi();
   }
@@ -6338,6 +6338,97 @@ html[data-theme="light"] .mvAvailabilityNotice button{background:#fff!important;
     const first=prof.querySelector('.panel');if(first&&first.nextSibling)prof.insertBefore(panel,first.nextSibling);else prof.appendChild(panel);
   }
   apply();
+})();
+</script>
+
+<div class="modal" id="mvFilterModal"><div class="sheet"><button class="close" onclick="closeModal('mvFilterModal')" aria-label="Kapat">×</button><h2 style="margin:0 0 4px">Filtrele ve sırala</h2><p class="muted" style="margin:0 0 6px">Seçimler ana sayfa, istasyon listesi ve haritada geçerli.</p><div id="mvFilterBody"></div></div></div>
+<style id="mv-filters-1016">
+.mvFilterBtn{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;height:44px;padding:0 14px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.05);color:var(--text);font-weight:750;font-size:13px;font-family:inherit;cursor:pointer}
+.mvFilterBtn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+.mvFilterBtn .n{min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--accentGrad);color:var(--onAccent);font-size:11px;display:grid;place-items:center}
+.mvFilterBtn.on{border-color:rgba(47,240,143,.5)}
+.mvFGroup{margin-top:16px}
+.mvFGroup h4{margin:0 0 8px;font-size:13px;letter-spacing:.3px;text-transform:uppercase;color:var(--muted)}
+.mvFOpts{display:flex;flex-wrap:wrap;gap:8px}
+.mvFOpt{height:40px;padding:0 14px;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.05);color:var(--text);font-weight:700;font-size:13px;font-family:inherit;cursor:pointer}
+.mvFOpt.on{background:var(--accentGrad);color:var(--onAccent);border-color:transparent}
+.mvFActions{display:flex;gap:8px;margin-top:20px}
+.mvSorts{display:flex!important;gap:8px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.mvSorts::-webkit-scrollbar{display:none}
+.mvSorts .sort{flex:0 0 auto;white-space:nowrap}
+.mvActiveFilters{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.mvActiveFilters span{font-size:12px;font-weight:700;padding:5px 10px;border-radius:999px;background:rgba(47,240,143,.12);color:var(--green);border:1px solid rgba(47,240,143,.3)}
+.mvActiveFilters button{font-size:12px;font-weight:700;padding:5px 10px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer;font-family:inherit}
+.mvActiveFilters:empty{display:none}
+html[data-theme="light"] .mvFilterBtn,html[data-theme="light"] .mvFOpt{background:#fff;color:var(--text)}
+html[data-theme="light"] .mvFOpt.on{color:var(--onAccent)}
+html[data-theme="light"] .mvActiveFilters span{color:#0a7f47;background:rgba(15,191,106,.12)}
+body[data-tab="route"] .mvFilterBtn,body[data-tab="profile"] .mvFilterBtn,body[data-tab="favorites"] .mvFilterBtn,body[data-tab="route"] .mvActiveFilters,body[data-tab="profile"] .mvActiveFilters,body[data-tab="favorites"] .mvActiveFilters{display:none!important}
+</style>
+<script id="mv-filters-js-1016">
+/* MV_FILTERS_1016: connector type / minimum power filters and nearest / cheapest / fastest sorting. */
+(function(){
+  const KEY='molavolt_filters_v1';
+  const SORTS=[['distance','En yakın'],['price','En ucuz'],['power','En hızlı'],['name','A-Z']];
+  const CONNECTORS=['CCS2','Type 2','CHAdeMO'];
+  const POWERS=[[0,'Tümü'],[22,'22 kW+'],[50,'50 kW+ (DC)'],[150,'150 kW+']];
+  let state={sort:'distance',connectors:[],minKw:0};
+  try{state=Object.assign(state,JSON.parse(localStorage.getItem(KEY)||'{}'))}catch(_){}
+  const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(state))}catch(_){}};
+  function maxKw(s){const m=String(s.power||'').match(/\d+(?:[.,]\d+)?(?=\s*kW)/gi)||[];const v=m.map(x=>Number(x.replace(',','.'))).filter(Number.isFinite);return v.length?Math.max(...v):0}
+  // Older cached lists only say AC/DC: AC sockets are Type 2 and DC almost always CCS2 in Turkey.
+  function connectors(s){const t=String(s.sockets||'');const out=new Set();if(/CCS/i.test(t))out.add('CCS2');if(/TYPE\s?2/i.test(t))out.add('Type 2');if(/CHADEMO/i.test(t))out.add('CHAdeMO');if(!out.size){if(/\bAC\b/i.test(t))out.add('Type 2');if(/\bDC\b/i.test(t))out.add('CCS2');}return out}
+  function price(s){let p=Number(s.price);if(!Number.isFinite(p)&&typeof window.mvTariffFallback==='function')p=window.mvTariffFallback(s);return Number.isFinite(p)&&p>0?p:Infinity}
+  window.mvExtraFilter=function(s){
+    if(state.minKw&&maxKw(s)<state.minKw)return false;
+    if(state.connectors.length){const c=connectors(s);if(!state.connectors.some(x=>c.has(x)))return false;}
+    return true;
+  };
+  window.mvSortCompare=function(a,b){
+    const d=(distKey(a)-distKey(b))||0;
+    if(state.sort==='name')return String(a.name||'').localeCompare(String(b.name||''),'tr');
+    if(state.sort==='price')return (price(a)-price(b))||d;
+    if(state.sort==='power')return (maxKw(b)-maxKw(a))||d;
+    return d;
+  };
+  // Cheapest / fastest across all of Türkiye is not useful; rank those within 50 km first.
+  const baseCompare=window.mvSortCompare;
+  window.mvSortCompare=function(a,b){
+    if(state.sort==='price'||state.sort==='power'){const na=distKey(a)<=50,nb=distKey(b)<=50;if(na!==nb)return na?-1:1;}
+    return baseCompare(a,b);
+  };
+  window.setSort=function(v){state.sort=v;sortMode=v==='name'?'name':'distance';save();renderUi();applyFilters();};
+  function activeCount(){return state.connectors.length+(state.minKw?1:0)}
+  function renderUi(){
+    const sorts=document.getElementById('mvSorts');
+    if(sorts)sorts.innerHTML=SORTS.map(([k,l])=>`<button type="button" class="sort ${state.sort===k?'active':''}" onclick="setSort('${k}')">${l}</button>`).join('');
+    const btn=document.getElementById('mvFilterBtn');
+    if(btn){const n=activeCount();btn.classList.toggle('on',!!n);btn.innerHTML='<svg viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Filtre'+(n?`<span class="n">${n}</span>`:'');}
+    const act=document.getElementById('mvActiveFilters');
+    if(act){const tags=[...state.connectors,...(state.minKw?[state.minKw+' kW+']:[])];act.innerHTML=tags.length?tags.map(t=>`<span>${esc(t)}</span>`).join('')+'<button type="button" onclick="mvClearFilters()">Temizle</button>':'';}
+    const body=document.getElementById('mvFilterBody');
+    if(body){
+      const count=(stations||[]).filter(window.mvExtraFilter).length;
+      body.innerHTML=`<div class="mvFGroup"><h4>Sıralama</h4><div class="mvFOpts">${SORTS.map(([k,l])=>`<button type="button" class="mvFOpt ${state.sort===k?'on':''}" data-sort="${k}">${l}</button>`).join('')}</div></div>
+        <div class="mvFGroup"><h4>Soket tipi</h4><div class="mvFOpts">${CONNECTORS.map(c=>`<button type="button" class="mvFOpt ${state.connectors.includes(c)?'on':''}" data-conn="${c}">${c}</button>`).join('')}</div></div>
+        <div class="mvFGroup"><h4>En düşük güç</h4><div class="mvFOpts">${POWERS.map(([k,l])=>`<button type="button" class="mvFOpt ${state.minKw===k?'on':''}" data-kw="${k}">${l}</button>`).join('')}</div></div>
+        <div class="mvFActions"><button type="button" class="mvBtn ghost block" onclick="mvClearFilters()">Temizle</button><button type="button" class="mvBtn primary block" onclick="closeModal('mvFilterModal')">${count} istasyonu göster</button></div>`;
+      body.querySelectorAll('[data-sort]').forEach(b=>b.onclick=()=>{state.sort=b.dataset.sort;sortMode=state.sort==='name'?'name':'distance';changed()});
+      body.querySelectorAll('[data-conn]').forEach(b=>b.onclick=()=>{const c=b.dataset.conn,i=state.connectors.indexOf(c);if(i>=0)state.connectors.splice(i,1);else state.connectors.push(c);changed()});
+      body.querySelectorAll('[data-kw]').forEach(b=>b.onclick=()=>{state.minKw=Number(b.dataset.kw);changed()});
+    }
+  }
+  function changed(){save();renderUi();applyFilters();if(window.renderHomeStationMap)setTimeout(window.renderHomeStationMap,50);}
+  window.mvClearFilters=function(){state.connectors=[];state.minKw=0;changed();};
+  window.mvOpenFilters=function(){renderUi();openModal('mvFilterModal');};
+  const bar=document.querySelector('.mvBrandBar');
+  if(bar&&!document.getElementById('mvFilterBtn')){
+    const b=document.createElement('button');b.type='button';b.id='mvFilterBtn';b.className='mvFilterBtn';b.onclick=window.mvOpenFilters;bar.appendChild(b);
+    const act=document.createElement('div');act.id='mvActiveFilters';act.className='mvActiveFilters';bar.parentNode.insertBefore(act,bar.nextSibling);
+  }
+  sortMode=state.sort==='name'?'name':'distance';
+  renderUi();
+  try{applyFilters()}catch(err){console.warn(err)}
 })();
 </script>
 </body>
