@@ -5217,7 +5217,7 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
       if(mapError)return;
       if(!map){
         el.replaceChildren();
-        map=new google.maps.Map(el,{center:{lat:39,lng:35},zoom:6,mapTypeId:satellite?'satellite':'roadmap',mapTypeControl:false,fullscreenControl:false,streetViewControl:false,gestureHandling:'greedy',clickableIcons:false});
+        map=new google.maps.Map(el,{center:{lat:39,lng:35},zoom:6,mapTypeId:satellite?'satellite':'roadmap',mapTypeControl:false,fullscreenControl:false,streetViewControl:false,gestureHandling:(document.querySelector('.homeMapWrap.homeMapFullscreen')?'greedy':'cooperative'),clickableIcons:false});
         info=new google.maps.InfoWindow();
         firstPaint=true;
       }
@@ -5270,11 +5270,13 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
   window.openHomeMapFullscreen=function(){
     var wrap=document.querySelector('.homeMapWrap');if(!wrap)return;
     wrap.classList.add('homeMapFullscreen');document.body.style.overflow='hidden';
+    if(map)map.setOptions({gestureHandling:'greedy'});
     setTimeout(function(){if(map){google.maps.event.trigger(map,'resize');map.setCenter(map.getCenter());}},180);
   };
   window.closeHomeMapFullscreen=function(){
     var wrap=document.querySelector('.homeMapWrap');if(!wrap)return;
     wrap.classList.remove('homeMapFullscreen');document.body.style.overflow='';
+    if(map)map.setOptions({gestureHandling:'cooperative'});
     setTimeout(function(){if(map){google.maps.event.trigger(map,'resize');map.setCenter(map.getCenter());}},180);
   };
   window.toggleHomeMapNearby=function(){
