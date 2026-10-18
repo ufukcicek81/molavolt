@@ -5249,8 +5249,9 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
       }
       updateUserMarker();
       if(nearby){
-        var up=Number(userPos&&userPos.lat),ul=Number(userPos&&userPos.lon);
-        if(Number.isFinite(up)&&Number.isFinite(ul))map.setCenter({lat:up,lng:ul});
+        var up=Number(userPos&&userPos.lat),ul=Number(userPos&&userPos.lon),posKey=up.toFixed(4)+','+ul.toFixed(4);
+        // recenter only on first paint, mode change or a new position: periodic redraws must not yank the map back
+        if(Number.isFinite(up)&&Number.isFinite(ul)&&(firstPaint||!map.__mvNearMode||map.__mvPosKey!==posKey)){map.setCenter({lat:up,lng:ul});map.__mvPosKey=posKey;}
         if(firstPaint || !map.__mvNearMode)map.setZoom(12);
       }else if(firstPaint || map.__mvNearMode){
         map.setCenter({lat:39,lng:35});map.setZoom(6);
@@ -5267,6 +5268,7 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
   window.renderHomeStationMap=renderHomeStationMap;
   window.mvCenterMap=function(lat,lng,zoom){if(map&&Number.isFinite(lat)&&Number.isFinite(lng)){map.setCenter({lat:lat,lng:lng});map.setZoom(zoom||13);updateUserMarker();}};
   window.mvMapGestures=function(mode){if(map)map.setOptions({gestureHandling:mode})};
+  window.mvSetMapNearby=function(v){nearby=!!v;lastSignature='';renderHomeStationMap();};
   window.mvRenderGoogleMap=renderHomeStationMap;
   window.mvEnsureGoogleMaps=loadGoogle;
   window.openHomeMapFullscreen=function(){
@@ -5938,6 +5940,8 @@ body:not(.admin-mode) .bottomNav.customerOnly{grid-template-columns:repeat(5,min
   function socketText(s){const t=String(s.sockets||'');return /EPDK verisinde|bilgisi yok/i.test(t)?'':t.split(/\s*\/\s*/).filter(Boolean).join(' · ')}
   function priceOf(s){let p=Number(s.price),est=false;if(!Number.isFinite(p)&&window.mvTariffFallback){p=window.mvTariffFallback(s);est=Number.isFinite(p)}return Number.isFinite(p)?{text:p.toFixed(2).replace('.',',')+' TL/kWh',est}:null}
   function availability(s){
+    const lv=liveByKey.get(favKey(s));
+    if(lv&&Date.now()-lv.at<LIVE_TTL_MS&&!(window.mvAvailabilityTrusted&&window.mvAvailabilityTrusted(s)))applyLive(s,lv);
     if(!window.mvAvailabilityTrusted||!window.mvAvailabilityTrusted(s)){
       const c=typeof window.mvCommunityStatus==='function'?window.mvCommunityStatus(s):null;
       return c?{key:c.key,label:c.label,source:'community',at:c.at,count:c.count}:{key:'none',label:'Canlı durum yok'};
@@ -6022,6 +6026,58 @@ body:not(.admin-mode) .bottomNav.customerOnly{grid-template-columns:repeat(5,min
     liveCache.set(key,{at:Date.now(),data});
     return data;
   }
+  const liveByKey=new Map(),areaChecked=new Map();
+  function liveFromPlace(p){
+    const ev=p&&p.evChargeOptions,aggs=ev?(ev.connectorAggregations||ev.connectorAggregation||[]):[];
+    const live=aggs.filter(a=>a.availableCount!=null&&a.availabilityLastUpdateTime);
+    if(!live.length)return null;
+    const at=Math.max(...live.map(a=>new Date(a.availabilityLastUpdateTime).getTime()).filter(Number.isFinite));
+    const total=sumBy(live,'count'),ok=sumBy(live,'availableCount'),off=sumBy(live,'outOfServiceCount');
+    return {at,counts:{ok,off,busy:Math.max(0,total-ok-off),total}};
+  }
+  let batchRunning=false,batchTimer=null;
+  async function batchLive(list){
+    if(batchRunning||typeof mvGetPlacesLibrary!=='function')return;
+    const now=Date.now(),FIVE=5*60*1000;
+    const todo=list.filter(s=>Number.isFinite(Number(s.lat))&&Number.isFinite(Number(s.lon))&&!(now-(areaChecked.get(favKey(s))||0)<FIVE));
+    if(!todo.length)return;
+    batchRunning=true;let changed=false,calls=0;
+    try{
+      const lib=await mvGetPlacesLibrary();
+      if(!lib||!lib.Place||typeof lib.Place.searchNearby!=='function')return;
+      const rank=lib.SearchNearbyRankPreference&&lib.SearchNearbyRankPreference.DISTANCE;
+      let pending=todo.slice();
+      while(pending.length&&calls<6){
+        const c=pending[0],lat=Number(c.lat),lng=Number(c.lon);calls++;
+        const req={fields:['location','evChargeOptions'],locationRestriction:{center:{lat,lng},radius:2500},includedTypes:['electric_vehicle_charging_station'],maxResultCount:20,language:'tr',region:'tr'};
+        if(rank)req.rankPreference=rank;
+        const res=await lib.Place.searchNearby(req);
+        const places=(res&&res.places||[]).map(p=>{const l=p.location;return {p,lat:l?(typeof l.lat==='function'?l.lat():l.lat):NaN,lng:l?(typeof l.lng==='function'?l.lng():l.lng):NaN}}).filter(x=>Number.isFinite(x.lat));
+        // with 20 results the area may hold more: only trust coverage up to the farthest place returned
+        const reach=places.length>=20?Math.max(...places.map(x=>km(lat,lng,x.lat,x.lng))):2.5;
+        (stations||[]).forEach(s=>{
+          const d=km(lat,lng,Number(s.lat),Number(s.lon));if(!(d<=reach))return;
+          const k=favKey(s);areaChecked.set(k,Date.now());
+          let best=null,bd=Infinity;places.forEach(x=>{const dd=km(Number(s.lat),Number(s.lon),x.lat,x.lng);if(dd<bd){bd=dd;best=x}});
+          const data=best&&bd<=0.15?liveFromPlace(best.p):null;
+          if(data&&Date.now()-data.at<LIVE_TTL_MS){liveByKey.set(k,data);liveCache.set(k,{at:Date.now(),data});applyLive(s,data);changed=true;}
+        });
+        areaChecked.set(favKey(c),Date.now());
+        pending=pending.filter(s=>!(Date.now()-(areaChecked.get(favKey(s))||0)<FIVE));
+      }
+    }catch(err){if(window.mvDiag)window.mvDiag('live batch error '+(err&&err.message||err))}
+    finally{batchRunning=false;if(window.mvDiag)window.mvDiag('live batch: '+calls+' Google queries');}
+    if(changed){try{renderCards();renderFavs()}catch(_){}}
+  }
+  window.mvBatchLive=batchLive;
+  function scheduleBatch(){
+    clearTimeout(batchTimer);
+    batchTimer=setTimeout(()=>{
+      const tab=typeof activeCustomerTab==='string'?activeCustomerTab:'home';
+      const list=tab==='favorites'&&window.mvFavStations?window.mvFavStations():(filtered||[]).slice(0,30);
+      batchLive(list);
+    },1200);
+  }
   function applyLive(s,data){
     const c=data.counts,key=c.ok>0?'ok':(c.total&&c.off===c.total?'off':'busy');
     const label=key==='ok'?(c.total>1?c.ok+'/'+c.total+' müsait':'Müsait'):key==='off'?'Arızalı / bakım':'Dolu';
@@ -6037,6 +6093,7 @@ body:not(.admin-mode) .bottomNav.customerOnly{grid-template-columns:repeat(5,min
     const still=document.getElementById('mvLiveStatus');
     if(!still||still.dataset.station!==s.id)return;
     if(data&&Date.now()-data.at<LIVE_TTL_MS){
+      liveByKey.set(favKey(s),data);
       [s,(stations||[]).find(x=>x.id===s.id)].forEach(x=>x&&applyLive(x,data));
       still.outerHTML=statusHtml(s);renderCards();
     }else{
@@ -6117,6 +6174,7 @@ body:not(.admin-mode) .bottomNav.customerOnly{grid-template-columns:repeat(5,min
   showTab=function(name){baseShowTab(name);document.body.dataset.tab=name;};
   window.showTab=showTab;
   document.body.dataset.tab=typeof activeCustomerTab==='string'&&activeCustomerTab?activeCustomerTab:'home';
+  const baseRenderCards=renderCards;renderCards=function(){const r=baseRenderCards.apply(this,arguments);scheduleBatch();return r};window.renderCards=renderCards;
   if(typeof renderCards==='function')try{renderCards();renderFavs()}catch(err){console.warn(err)}
 })();
 </script>
@@ -6996,8 +7054,10 @@ html[data-theme] body:not(.admin-mode) .bottomNav.customerOnly .navItem.active s
     const wrap=document.querySelector('.homeMapWrap');if(wrap)wrap.classList.add('homeMapFullscreen');
     document.body.style.overflow='hidden';
     if(window.mvMapGestures)window.mvMapGestures('greedy');
-    if(window.renderHomeStationMap)setTimeout(window.renderHomeStationMap,60);
+    if(window.mvSetMapNearby)setTimeout(()=>window.mvSetMapNearby(true),60);else if(window.renderHomeStationMap)setTimeout(window.renderHomeStationMap,60);
+    if(!located&&navigator.geolocation){located=true;navigator.geolocation.getCurrentPosition(pos=>{userPos={lat:pos.coords.latitude,lon:pos.coords.longitude};try{savePos(userPos);buildStations();applyFilters()}catch(_){}if(window.mvSetMapNearby)window.mvSetMapNearby(true);},()=>{},{enableHighAccuracy:true,timeout:12000,maximumAge:120000});}
   }
+  let located=false;
   function leave(){
     document.body.classList.remove('mvMapHome');
     const wrap=document.querySelector('.homeMapWrap');if(wrap)wrap.classList.remove('homeMapFullscreen');
