@@ -2,6 +2,7 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  // Errors are never cached; a good station list is cached at the CDN below (EPDK allows ~1 full request per hour).
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   if (req.method === "OPTIONS") return res.status(204).end();
@@ -133,6 +134,6 @@ export default async function handler(req, res) {
   }
   function normalizeResponse(json){json=parseMaybe(json);const cols=getColumns(json);const rows=getRows(json);if(!rows.length)return json;const normalizedRows=rows.map(row=>enrichRow(row,cols));if(Array.isArray(json))return normalizedRows;if(json&&Array.isArray(json.result))return {...json,result:normalizedRows};if(json&&typeof json.result==="string")return {...json,result:normalizedRows};if(json&&json.result&&typeof json.result==="object")return {...json,result:{...json.result,rows:normalizedRows}};if(json&&Array.isArray(json.data))return {...json,data:normalizedRows};if(json&&typeof json.data==="string")return {...json,data:normalizedRows};if(json&&json.data&&typeof json.data==="object")return {...json,data:{...json.data,result:normalizedRows}};return{data:normalizedRows}}
   const attempts=[{label:"GET body boş obje",body:"{}"},{label:"GET body boş string",body:JSON.stringify("")},{label:"GET body string obje",body:JSON.stringify("{}")},{label:"GET body null alanlar",body:JSON.stringify({lisansNo:null,sarjIstasyonuAdi:null,sarjIstasyonuNo:null,markaAdi:null,yesilSarjIstasyonuMu:null,hizmetSekli:null})},{label:"GET body boş alanlar",body:JSON.stringify({lisansNo:"",sarjIstasyonuAdi:"",sarjIstasyonuNo:"",markaAdi:"",yesilSarjIstasyonuMu:"",hizmetSekli:""})}];
-  const logs=[];for(const attempt of attempts){const r=await epdkRequest(attempt.body,attempt.label);const rowCount=getRows(r.json).length;logs.push({label:r.label,statusCode:r.statusCode,numRows:rowCount,sample:r.raw.slice(0,500)});if(r.statusCode===200&&rowCount>0)return res.status(200).send(JSON.stringify(normalizeResponse(r.json)))}
+  const logs=[];for(const attempt of attempts){const r=await epdkRequest(attempt.body,attempt.label);const rowCount=getRows(r.json).length;logs.push({label:r.label,statusCode:r.statusCode,numRows:rowCount,sample:r.raw.slice(0,500)});if(r.statusCode===200&&rowCount>0){res.setHeader("Cache-Control","public, max-age=0, s-maxage=3600, stale-while-revalidate=86400");res.setHeader("CDN-Cache-Control","public, s-maxage=3600, stale-while-revalidate=86400");return res.status(200).send(JSON.stringify(normalizeResponse(r.json)))}}
   return res.status(502).send(JSON.stringify({ok:false,error:"EPDK bağlantısı çalıştı ama istasyon verisi ayrıştırılamadı",note:"EPDK'nın güncel REST servisinden gelen iç içe/string JSON cevap formatları da denendi.",attempts:logs},null,2));
 }
