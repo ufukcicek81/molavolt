@@ -5265,6 +5265,8 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
     }
   }
   window.renderHomeStationMap=renderHomeStationMap;
+  window.mvCenterMap=function(lat,lng,zoom){if(map&&Number.isFinite(lat)&&Number.isFinite(lng)){map.setCenter({lat:lat,lng:lng});map.setZoom(zoom||13);updateUserMarker();}};
+  window.mvMapGestures=function(mode){if(map)map.setOptions({gestureHandling:mode})};
   window.mvRenderGoogleMap=renderHomeStationMap;
   window.mvEnsureGoogleMaps=loadGoogle;
   window.openHomeMapFullscreen=function(){
@@ -6416,7 +6418,7 @@ body[data-tab="route"] .mvFilterBtn,body[data-tab="profile"] .mvFilterBtn,body[d
   const SORTS=[['distance','En yakın'],['price','En ucuz'],['power','En hızlı'],['name','A-Z']];
   const CONNECTORS=['CCS2','Type 2','CHAdeMO'];
   const POWERS=[[0,'Tümü'],[22,'22 kW+'],[50,'50 kW+ (DC)'],[150,'150 kW+']];
-  let state={sort:'distance',connectors:[],minKw:0};
+  let state={sort:'distance',connectors:[],minKw:0,kind:''};
   try{state=Object.assign(state,JSON.parse(localStorage.getItem(KEY)||'{}'))}catch(_){}
   const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(state))}catch(_){}};
   function maxKw(s){const m=String(s.power||'').match(/\d+(?:[.,]\d+)?(?=\s*kW)/gi)||[];const v=m.map(x=>Number(x.replace(',','.'))).filter(Number.isFinite);return v.length?Math.max(...v):0}
@@ -6424,6 +6426,8 @@ body[data-tab="route"] .mvFilterBtn,body[data-tab="profile"] .mvFilterBtn,body[d
   function connectors(s){const t=String(s.sockets||'');const out=new Set();if(/CCS/i.test(t))out.add('CCS2');if(/TYPE\s?2/i.test(t))out.add('Type 2');if(/CHADEMO/i.test(t))out.add('CHAdeMO');if(!out.size){if(/\bAC\b/i.test(t))out.add('Type 2');if(/\bDC\b/i.test(t))out.add('CCS2');}return out}
   function price(s){let p=Number(s.price);if(!Number.isFinite(p)&&typeof window.mvTariffFallback==='function')p=window.mvTariffFallback(s);return Number.isFinite(p)&&p>0?p:Infinity}
   window.mvExtraFilter=function(s){
+    if(state.kind==='dc'&&!(maxKw(s)>=50||connectors(s).has('CCS2')||connectors(s).has('CHAdeMO')))return false;
+    if(state.kind==='ac'&&!connectors(s).has('Type 2'))return false;
     if(state.minKw&&maxKw(s)<state.minKw)return false;
     if(state.connectors.length){const c=connectors(s);if(!state.connectors.some(x=>c.has(x)))return false;}
     return true;
@@ -6442,14 +6446,16 @@ body[data-tab="route"] .mvFilterBtn,body[data-tab="profile"] .mvFilterBtn,body[d
     return baseCompare(a,b);
   };
   window.setSort=function(v){state.sort=v;sortMode=v==='name'?'name':'distance';save();renderUi();applyFilters();};
-  function activeCount(){return state.connectors.length+(state.minKw?1:0)}
+  function activeCount(){return state.connectors.length+(state.minKw?1:0)+(state.kind?1:0)}
+  window.mvFilterKind=function(k){state.kind=state.kind===k?'':k;changed();document.dispatchEvent(new CustomEvent('mv-filters'))};
+  window.mvFilterState=()=>Object.assign({},state);
   function renderUi(){
     const sorts=document.getElementById('mvSorts');
     if(sorts)sorts.innerHTML=SORTS.map(([k,l])=>`<button type="button" class="sort ${state.sort===k?'active':''}" onclick="setSort('${k}')">${l}</button>`).join('');
     const btn=document.getElementById('mvFilterBtn');
     if(btn){const n=activeCount();btn.classList.toggle('on',!!n);btn.innerHTML='<svg viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Filtre'+(n?`<span class="n">${n}</span>`:'');}
     const act=document.getElementById('mvActiveFilters');
-    if(act){const tags=[...state.connectors,...(state.minKw?[state.minKw+' kW+']:[])];act.innerHTML=tags.length?tags.map(t=>`<span>${esc(t)}</span>`).join('')+'<button type="button" onclick="mvClearFilters()">Temizle</button>':'';}
+    if(act){const tags=[...(state.kind?[state.kind.toUpperCase()]:[]),...state.connectors,...(state.minKw?[state.minKw+' kW+']:[])];act.innerHTML=tags.length?tags.map(t=>`<span>${esc(t)}</span>`).join('')+'<button type="button" onclick="mvClearFilters()">Temizle</button>':'';}
     const body=document.getElementById('mvFilterBody');
     if(body){
       const count=(stations||[]).filter(window.mvExtraFilter).length;
@@ -6462,8 +6468,8 @@ body[data-tab="route"] .mvFilterBtn,body[data-tab="profile"] .mvFilterBtn,body[d
       body.querySelectorAll('[data-kw]').forEach(b=>b.onclick=()=>{state.minKw=Number(b.dataset.kw);changed()});
     }
   }
-  function changed(){save();renderUi();applyFilters();if(window.renderHomeStationMap)setTimeout(window.renderHomeStationMap,50);}
-  window.mvClearFilters=function(){state.connectors=[];state.minKw=0;changed();};
+  function changed(){save();renderUi();applyFilters();if(window.renderHomeStationMap)setTimeout(window.renderHomeStationMap,50);document.dispatchEvent(new CustomEvent('mv-filters'));}
+  window.mvClearFilters=function(){state.connectors=[];state.minKw=0;state.kind='';changed();document.dispatchEvent(new CustomEvent('mv-filters'))};
   window.mvOpenFilters=function(){renderUi();openModal('mvFilterModal');};
   const bar=document.querySelector('.mvBrandBar');
   if(bar&&!document.getElementById('mvFilterBtn')){
@@ -6896,6 +6902,164 @@ html[data-theme="light"] .mvVeh .edit{background:#f1f5f9}
   (function(){let v=null;try{v=JSON.parse(localStorage.getItem(KEY)||'null')}catch(_){}if(!v)return;[['rp_soc',v.soc],['rp_battery',v.battery],['rp_manual',v.consumption]].forEach(([id,val])=>{const el=document.getElementById(id);if(el&&val)el.value=val})})();
   const baseCards=renderCards;renderCards=function(){baseCards.apply(this,arguments);try{render()}catch(err){console.warn(err)}};window.renderCards=renderCards;
   render();
+})();
+</script>
+
+<div class="modal" id="mvMolaModal"><div class="sheet"><button class="close" onclick="closeModal('mvMolaModal')" aria-label="Kapat">×</button><h2 style="margin:0 0 10px">Mola</h2><div id="mvMolaBody"></div></div></div>
+<div class="modal" id="mvOfferModal"><div class="sheet"><button class="close" onclick="closeModal('mvOfferModal')" aria-label="Kapat">×</button><div id="mvOfferBody"></div></div></div>
+<div id="mvMapUI" aria-label="Harita kontrolleri">
+  <div class="mvPromo" id="mvPromo" hidden><div class="mvPromoTrack" id="mvPromoTrack"></div></div>
+  <div class="mvMapSearch">
+    <label class="mvMS"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-6 7-11a7 7 0 1 0-14 0c0 5 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg><input id="mvMapQuery" type="search" placeholder="Konum / istasyon ara" aria-label="Konum veya istasyon ara" enterkeyhint="search"></label>
+    <button type="button" class="mvKind" data-kind="ac" onclick="mvFilterKind('ac')"><b>AC</b><small>Yavaş</small></button>
+    <button type="button" class="mvKind" data-kind="dc" onclick="mvFilterKind('dc')"><b>DC</b><small>Hızlı</small></button>
+    <button type="button" class="mvKind mvKindF" onclick="mvOpenFilters()" aria-label="Filtrele"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg><small>Filtre</small></button>
+  </div>
+  <div class="mvFab">
+    <button type="button" onclick="showTab('favorites')" aria-label="Favoriler"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg></button>
+    <button type="button" onclick="toggleHomeMapLayer&&toggleHomeMapLayer()" aria-label="Uydu görünümü"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/></svg></button>
+    <button type="button" onclick="mvLocateMe()" aria-label="Konumuma git"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="7"/></svg></button>
+    <button type="button" class="list" onclick="showTab('stations')" aria-label="Yakınımdakiler listesi"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg></button>
+  </div>
+</div>
+<style id="mv-maphome-1018">
+/* MV_MAPHOME_1018: full-screen map home with sponsor ticker, search + AC/DC, floating buttons and a dark bottom bar with a raised centre button. */
+#mvMapUI{display:none}
+body.mvMapHome #mvMapUI{display:block;position:fixed;inset:0;z-index:100003;pointer-events:none}
+body.mvMapHome #mvMapUI>*{pointer-events:auto}
+body.mvMapHome .top,body.mvMapHome .mvMainSearch,body.mvMapHome .mvSearchMessage,body.mvMapHome .mvBrandBar,body.mvMapHome #brandChips,body.mvMapHome #mvActiveFilters,body.mvMapHome #tab-home>:not(.homeMapSection){display:none!important}
+body.mvMapHome .homeMapHead,body.mvMapHome .mapFullscreenClose,body.mvMapHome .homeMapLegend,body.mvMapHome .homeMapModeBtns{display:none!important}
+body.mvMapHome .homeMapSection{margin:0!important;padding:0!important}
+.mvPromo{position:absolute;left:10px;right:10px;top:calc(env(safe-area-inset-top,0px) + 10px);height:46px;border-radius:16px;overflow:hidden;background:var(--accentGrad);box-shadow:0 8px 24px rgba(0,0,0,.25);display:flex;align-items:center}
+.mvPromo[hidden]{display:none}
+.mvPromoTrack{display:inline-flex;white-space:nowrap;animation:mvMarquee var(--mvMarq,28s) linear infinite;padding-left:10px}
+.mvPromo:hover .mvPromoTrack{animation-play-state:paused}
+@keyframes mvMarquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+@media (prefers-reduced-motion:reduce){.mvPromoTrack{animation:none}}
+.mvPromoItem{display:inline-flex;align-items:center;gap:8px;margin-right:26px;border:0;background:transparent;color:#04140b;font-weight:800;font-size:14px;font-family:inherit;cursor:pointer;height:46px}
+.mvPromoItem .pct{padding:4px 8px;border-radius:999px;background:#04140b;color:#fff;font-size:12px}
+.mvPromoItem svg{width:18px;height:18px;fill:none;stroke:#04140b;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.mvMapSearch{position:absolute;left:10px;right:10px;top:calc(env(safe-area-inset-top,0px) + 64px);display:flex;gap:6px;align-items:stretch}
+body.mvMapHome .mvPromo[hidden]+.mvMapSearch{top:calc(env(safe-area-inset-top,0px) + 10px)}
+.mvMS{flex:1;min-width:0;height:54px;border-radius:18px;background:var(--mvSurf);box-shadow:0 8px 24px rgba(0,0,0,.18);display:flex;align-items:center;gap:8px;padding:0 14px;box-sizing:border-box}
+.mvMS svg{flex:0 0 20px;width:20px;height:20px;fill:none;stroke:var(--muted);stroke-width:2}
+.mvMS input{flex:1;min-width:0;border:0!important;background:transparent!important;color:var(--text)!important;font-size:15px;outline:none;padding:0!important;height:auto!important;box-shadow:none!important}
+.mvKind{flex:0 0 52px;height:54px;border-radius:16px;border:1px solid transparent;background:var(--mvSurf);color:var(--text);box-shadow:0 8px 24px rgba(0,0,0,.18);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;cursor:pointer;font-family:inherit;padding:0}
+.mvKind b{font-size:15px;font-weight:800;line-height:1}
+.mvKind small{font-size:10px;color:var(--muted);font-weight:700}
+.mvKind svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round}
+.mvKind.on{background:var(--accentGrad);color:var(--onAccent)}
+.mvKind.on small{color:var(--onAccent)}
+.mvFab{position:absolute;right:12px;bottom:calc(env(safe-area-inset-bottom,0px) + 118px);display:flex;flex-direction:column;gap:12px}
+.mvFab button{width:54px;height:54px;border-radius:50%;border:0;background:var(--mvSurf);color:var(--text);box-shadow:0 8px 22px rgba(0,0,0,.22);display:grid;place-items:center;cursor:pointer}
+.mvFab button svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.mvFab button.list{background:var(--accentGrad);color:var(--onAccent)}
+:root{--mvSurf:rgba(255,255,255,.96)}
+html[data-theme="dark"]{--mvSurf:rgba(16,26,40,.94)}
+/* bottom bar: dark in both themes */
+html[data-theme] body:not(.admin-mode) .bottomNav.customerOnly,body:not(.admin-mode) .bottomNav.customerOnly{z-index:100006!important;display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;align-items:end!important;background:#0b1422!important;border:1px solid rgba(255,255,255,.08)!important;border-radius:26px!important;padding:8px 6px!important;overflow:visible!important}
+body:not(.admin-mode) .bottomNav.customerOnly .navItem{color:#8ea0b5!important;background:transparent!important}
+body:not(.admin-mode) .bottomNav.customerOnly .navItem.active{color:#fff!important;background:transparent!important}
+body:not(.admin-mode) .bottomNav.customerOnly .navItem.active svg{stroke:#fff!important}
+body:not(.admin-mode) .bottomNav.customerOnly .navItem .navIcon{background:transparent!important}
+.mvCenterBtn{justify-self:center;align-self:center;width:76px;height:76px;margin-top:-40px;border-radius:50%;border:6px solid #0b1422;background:var(--accentGrad);color:#04140b;display:grid;place-items:center;box-shadow:0 10px 26px rgba(47,240,143,.35);cursor:pointer;padding:0}
+.mvCenterBtn svg{width:32px;height:32px;fill:none;stroke:currentColor;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+.mvCenterLbl{display:block;font-size:10px;font-weight:800;color:#8ea0b5;text-align:center;margin-top:2px}
+.modal{z-index:100010!important}
+.mvTrip{z-index:100008!important}
+#routeToast,.routeToast{z-index:100020!important}
+.mvOfferHead{display:flex;gap:12px;align-items:center}
+#mvMolaBody #mvHomeTop{padding:0;margin:0}#mvMolaBody .mvVeh{width:100%;box-sizing:border-box}
+html[data-theme] body:not(.admin-mode) .bottomNav.customerOnly .navItem.active{color:#fff!important;background:rgba(255,255,255,.08)!important}
+html[data-theme] body:not(.admin-mode) .bottomNav.customerOnly .navItem.active svg{stroke:var(--accent,#2ff08f)!important}
+.mvOfferHead .gift{flex:0 0 52px;width:52px;height:52px;border-radius:16px;display:grid;place-items:center;background:rgba(47,240,143,.14)}
+</style>
+<script id="mv-maphome-js-1018">
+(function(){
+  const e=v=>esc(String(v??''));
+  // ---- bottom bar: Harita · Yakınımdakiler · [Mola] · Rota · Profil ----
+  const nav=document.querySelector('.bottomNav.customerOnly');
+  if(nav){
+    const icon=d=>`<span class="navIcon"><svg viewBox="0 0 24 24">${d}</svg></span>`;
+    nav.innerHTML=
+      `<button class="navItem" id="nav-home" onclick="showTab('home')">${icon('<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/>')}<span>Harita</span></button>`+
+      `<button class="navItem" id="nav-stations" onclick="showTab('stations')">${icon('<path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/>')}<span>Yakınımda</span></button>`+
+      `<div><button type="button" class="mvCenterBtn" onclick="mvOpenMola()" aria-label="Mola: aracım ve sıradaki mola"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></button><span class="mvCenterLbl">Mola</span></div>`+
+      `<button class="navItem" id="nav-route" onclick="showTab('route')">${icon('<path d="M4 19h16M6 15l4-6 4 4 4-7"/>')}<span>Rota</span></button>`+
+      `<button class="navItem" id="nav-profile" onclick="showTab('profile')">${icon('<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>')}<span>Profil</span></button>`;
+  }
+  const h=document.querySelector('#tab-stations h3');if(h)h.textContent='Yakınımdakiler';
+
+  // ---- map home on/off with the home tab ----
+  function enter(){
+    document.body.classList.add('mvMapHome');
+    const wrap=document.querySelector('.homeMapWrap');if(wrap)wrap.classList.add('homeMapFullscreen');
+    document.body.style.overflow='hidden';
+    if(window.mvMapGestures)window.mvMapGestures('greedy');
+    if(window.renderHomeStationMap)setTimeout(window.renderHomeStationMap,60);
+  }
+  function leave(){
+    document.body.classList.remove('mvMapHome');
+    const wrap=document.querySelector('.homeMapWrap');if(wrap)wrap.classList.remove('homeMapFullscreen');
+    document.body.style.overflow='';
+    if(window.mvMapGestures)window.mvMapGestures('cooperative');
+  }
+  const baseTab=showTab;
+  showTab=function(n){baseTab.apply(this,arguments);if(n==='home')enter();else leave();window.scrollTo(0,0);};
+  window.showTab=showTab;
+  // the old "Tam ekran" close (×) must not strand the user without the map home
+  const baseClose=window.closeHomeMapFullscreen;
+  window.closeHomeMapFullscreen=function(){if(document.body.classList.contains('mvMapHome'))return;if(baseClose)baseClose()};
+
+  // ---- Mola sheet: vehicle + next stop ----
+  window.mvOpenMola=function(){
+    const body=document.getElementById('mvMolaBody'),top=document.getElementById('mvHomeTop');
+    if(body&&top&&top.parentNode!==body){top.classList.remove('section');body.appendChild(top)}
+    try{renderCards()}catch(_){}
+    openModal('mvMolaModal');
+  };
+
+  // ---- search: jump to the list with the query ----
+  const q=document.getElementById('mvMapQuery');
+  if(q){
+    const go=()=>{const v=q.value.trim();const main=document.getElementById('searchInput');if(main){main.value=v}try{applyFilters()}catch(_){}showTab('stations');};
+    q.addEventListener('keydown',ev=>{if(ev.key==='Enter'){ev.preventDefault();go()}});
+    q.addEventListener('search',go);
+  }
+  function syncKinds(){const st=window.mvFilterState?window.mvFilterState():{};document.querySelectorAll('.mvKind[data-kind]').forEach(b=>{const on=st.kind===b.dataset.kind;b.classList.toggle('on',on);b.setAttribute('aria-pressed',on)})}
+  document.addEventListener('mv-filters',syncKinds);syncKinds();
+
+  // ---- locate me ----
+  window.mvLocateMe=function(){
+    const center=()=>{const la=Number(userPos&&userPos.lat),lo=Number(userPos&&userPos.lon);if(window.mvCenterMap)window.mvCenterMap(la,lo,13)};
+    if(!navigator.geolocation){center();return}
+    navigator.geolocation.getCurrentPosition(pos=>{userPos={lat:pos.coords.latitude,lon:pos.coords.longitude};try{savePos(userPos);buildStations();applyFilters()}catch(_){}center();},()=>{center();alert('Konum alınamadı. Telefonun konum iznini kontrol et.')},{enableHighAccuracy:true,timeout:10000,maximumAge:60000});
+  };
+
+  // ---- sponsor ticker ----
+  function renderPromo(){
+    const box=document.getElementById('mvPromo'),track=document.getElementById('mvPromoTrack');if(!box||!track)return;
+    let list=[];try{list=(typeof sponsors==='function'?sponsors():[]).filter(o=>o&&o.name)}catch(_){}
+    if(!list.length){box.hidden=true;track.innerHTML='';return}
+    const gift='<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M12 8v13M3 12h18M12 8S10 3 7.5 4.5 9 8 12 8zm0 0s2-5 4.5-3.5S15 8 12 8z"/></svg>';
+    const one=list.map(o=>`<button type="button" class="mvPromoItem" onclick="mvOpenOffer('${e(o.id)}')">${gift}<span>${e(o.name)}</span>${o.discount?`<span class="pct">${e(o.discount)}</span>`:''}<span style="font-weight:600">${e(String(o.offer||'').slice(0,60))}</span></button>`).join('');
+    track.innerHTML=one+one;
+    track.style.setProperty('--mvMarq',Math.max(16,list.length*9)+'s');
+    box.hidden=false;
+  }
+  window.mvOpenOffer=function(id){
+    let o=null;try{o=sponsors().find(x=>x.id===id)}catch(_){}
+    const b=document.getElementById('mvOfferBody');if(!o||!b)return;
+    const st=o.stationId?(stations||[]).find(x=>x.id===o.stationId):null;
+    b.innerHTML=`<div class="mvOfferHead"><div class="gift"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M12 8v13M3 12h18"/></svg></div><div><h2 style="margin:0">${e(o.name)}</h2>${o.discount?`<span class="tag g">${e(o.discount)}</span>`:''}</div></div><p style="margin:14px 0">${e(o.offer||'MolaVolt kullanıcılarına özel fırsat')}</p>${st?`<p class="muted" style="margin:0 0 12px">İstasyon: ${e(st.name)}</p>`:''}<button type="button" class="mvBtn primary block" style="width:100%" onclick="closeModal('mvOfferModal');useSponsorCoupon('${e(o.id)}','${e(st?st.id:'')}')">Fırsat kodu al</button><p class="muted" style="font-size:12px;margin:8px 0 0">Kod WhatsApp ile işletmeye iletilir; kasada göstererek indirimi kullanırsın.</p>`;
+    openModal('mvOfferModal');
+  };
+  const baseSponsors=window.renderSponsors;
+  if(typeof baseSponsors==='function'){window.renderSponsors=function(){const r=baseSponsors.apply(this,arguments);try{renderPromo()}catch(_){}return r};try{renderSponsors=window.renderSponsors}catch(_){}}
+  renderPromo();setTimeout(renderPromo,4000);
+
+  // start on the map (and mark the rebuilt bar's active tab)
+  showTab(typeof activeCustomerTab==='string'&&activeCustomerTab?activeCustomerTab:'home');
 })();
 </script>
 </body>
