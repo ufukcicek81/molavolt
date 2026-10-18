@@ -2,5 +2,5 @@
 <resources>
     <color name="status_bar">#07111D</color>
     <color name="navigation_bar">#07111D</color>
-    <color name="splash_background">#07111D</color>
+    <color name="splash_background">#2FF08F</color>
 </resources>

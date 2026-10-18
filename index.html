@@ -856,6 +856,13 @@ html.mv-admin-start .adminOnly{
   <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=1016">
 </head>
 <body>
+<!-- MV_SPLASH_1018: app launch screen (installed app only), continues the Android splash until the page is ready. -->
+<style>#mvSplash{position:fixed;inset:0;z-index:2147483000;background:#2ff08f;display:none;align-items:center;justify-content:center;transition:opacity .3s ease}#mvSplash img{width:min(68vw,330px);height:auto}html.mvSplashOn #mvSplash{display:flex}#mvSplash.out{opacity:0;pointer-events:none}</style>
+<div id="mvSplash" aria-hidden="true"><img src="splash-logo.png" alt=""></div>
+<script>(function(){var app=false;try{app=matchMedia('(display-mode: standalone)').matches||String(document.referrer).indexOf('android-app://')===0||navigator.standalone===true}catch(_){}
+if(!app)return;var r=document.documentElement;r.classList.add('mvSplashOn');var done=false,t0=Date.now();
+function hide(){if(done)return;done=true;var el=document.getElementById('mvSplash');if(!el)return;el.classList.add('out');setTimeout(function(){r.classList.remove('mvSplashOn')},350)}
+window.addEventListener('load',function(){var d=700-(Date.now()-t0);if(d>0)setTimeout(hide,d);else hide()});setTimeout(hide,3500);})();</script>
 <div id="routeToast" class="routeToast">Rota oluşturuluyor…</div>
 <div class="app">
   <div class="top">
