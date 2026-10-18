@@ -5933,11 +5933,14 @@ body:not(.admin-mode) .bottomNav.customerOnly{grid-template-columns:repeat(5,min
   function socketText(s){const t=String(s.sockets||'');return /EPDK verisinde|bilgisi yok/i.test(t)?'':t.split(/\s*\/\s*/).filter(Boolean).join(' · ')}
   function priceOf(s){let p=Number(s.price),est=false;if(!Number.isFinite(p)&&window.mvTariffFallback){p=window.mvTariffFallback(s);est=Number.isFinite(p)}return Number.isFinite(p)?{text:p.toFixed(2).replace('.',',')+' TL/kWh',est}:null}
   function availability(s){
-    if(!window.mvAvailabilityTrusted||!window.mvAvailabilityTrusted(s))return {key:'none',label:'Canlı durum yok'};
+    if(!window.mvAvailabilityTrusted||!window.mvAvailabilityTrusted(s)){
+      const c=typeof window.mvCommunityStatus==='function'?window.mvCommunityStatus(s):null;
+      return c?{key:c.key,label:c.label,source:'community',at:c.at,count:c.count}:{key:'none',label:'Canlı durum yok'};
+    }
     const k=s.availabilityKey,label=k==='busy'&&s.availabilityLabel==='Müsait soket yok'?'Dolu':(s.availabilityLabel||'');
     return {key:k==='ok'||k==='busy'||k==='off'?k:'none',label:label||'Canlı durum yok',counts:s.counts||{}};
   }
-  function ago(ts){const m=Math.round((Date.now()-Number(ts))/60000);return m<1?'az önce':m+' dk önce'}
+  function ago(ts){const m=Math.round((Date.now()-Number(ts))/60000);if(m<1)return 'az önce';if(m<60)return m+' dk önce';const h=Math.round(m/60);return h<24?h+' saat önce':Math.round(h/24)+' gün önce'}
   function kwText(s){const kw=maxKw(s);return Number.isFinite(kw)?kw+' kW'+(kw>=50?' DC':' AC'):''}
 
   // Favorites: unlimited, stored on the device. Station ids change when EPDK data reloads,
@@ -6039,9 +6042,13 @@ body:not(.admin-mode) .bottomNav.customerOnly{grid-template-columns:repeat(5,min
     const a=availability(s),c=a.counts||{};
     const total=Number(c.total)||0,bars=total>0&&total<=12?'<div class="mvSockets">'+['ok','busy','off'].flatMap(k=>Array(Math.max(0,Number(c[k])||0)).fill(`<i class="${k}"></i>`)).concat(Array(Math.max(0,total-(Number(c.ok)||0)-(Number(c.busy)||0)-(Number(c.off)||0))).fill('<i></i>')).join('')+'</div>':'';
     const inner=a.key==='none'
-      ?`<div class="mvStatus"><span class="big">•</span><div><b>Canlı soket durumu yok</b><small>${e(note||'Bu istasyon için operatör veya Google anlık boş/dolu bilgisi paylaşmıyor.')}</small></div></div>`
+      ?`<div class="mvStatus"><span class="big">•</span><div><b>Canlı soket durumu yok</b><small>${e(note||'Son 24 saatte bu istasyon için bildirim yok. Gidersen durumunu bildir, diğer sürücüler görsün.')}</small></div></div>`
+      :a.source==='community'
+      ?`<div class="mvStatus ${a.key}"><span class="big">●</span><div style="flex:1"><b>${e(a.label)}</b><small>Sürücü bildirimi · ${ago(a.at)}${a.count>1?' · son 2 saatte '+a.count+' bildirim':''}</small></div></div>`
       :`<div class="mvStatus ${a.key}"><span class="big">●</span><div style="flex:1"><b>${e(a.label)}</b><small>Güncellendi: ${ago(s.availabilityAt)}${s.availabilityProvider==='google'?' · Google Haritalar':''}</small>${bars}</div></div>`;
-    return `<div id="mvLiveStatus" data-station="${e(s.id)}">${inner}</div>`;
+    // Operators report live socket state to EPDK; its Şarj@TR app is the official place to double-check it.
+    const official=`<a class="mvOfficial" href="https://play.google.com/store/apps/details?id=tr.gov.epdk.sarjetTR" target="_blank" rel="noopener">Resmî canlı durum: EPDK Şarj@TR uygulamasında kontrol et ↗</a>`;
+    return `<div id="mvLiveStatus" data-station="${e(s.id)}">${inner}${official}</div>`;
   }
 
   stationCard=function(s){
@@ -6064,7 +6071,7 @@ body:not(.admin-mode) .bottomNav.customerOnly{grid-template-columns:repeat(5,min
         ${offers?`<span class="mvOffer">🎁 ${offers} fırsat</span>`:''}
         <div class="mvCardActions">
           ${s.mvFavOffline?'':`<button type="button" class="mvBtn ghost" onclick="openStationMap('${id}',event)">Harita</button>`}
-          <a class="mvBtn primary" href="${e(routeUrl(s))}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Yol tarifi</a>
+          <a class="mvBtn primary" data-route-for="${id}" href="${e(routeUrl(s))}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Yol tarifi</a>
         </div>
       </div>
     </article>`;
@@ -6090,7 +6097,7 @@ body:not(.admin-mode) .bottomNav.customerOnly{grid-template-columns:repeat(5,min
         <div><span>Fiyat</span><b>${price?e(price.text)+(price.est?' <small style="color:var(--muted);font-weight:500">(tahmini)</small>':''):'Bilinmiyor'}</b></div>
       </div>
       <div class="mvSheetActions">
-        <a class="mvBtn primary block" href="${e(routeUrl(s))}" target="_blank" rel="noopener">Yol tarifi al</a>
+        <a class="mvBtn primary block" data-route-for="${e(s.id)}" href="${e(routeUrl(s))}" target="_blank" rel="noopener">Yol tarifi al</a>
         ${s.mvFavOffline?'':`<button type="button" class="mvBtn ghost block" onclick="openStationMap('${e(s.id)}',event)">Haritada gör</button>`}
       </div>
       <button type="button" class="mvBtn ghost block fav ${isFav(s)?'on':''}" style="width:100%;margin-top:8px" onclick="mvToggleFav('${e(s.id)}',event,true)">${isFav(s)?'★ Favorilerden çıkar':'☆ Favorilere ekle'}</button>
@@ -6497,7 +6504,7 @@ html[data-theme="light"] .mvReport .st.working{color:#0a7f47}html[data-theme="li
 /* MV_ACCOUNT_1016: Google sign-in, favorites sync and station status reports (Firebase Auth + Firestore). */
 import { getApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import { getAuth, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, browserPopupRedirectResolver, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, collection, addDoc, deleteDoc, query, where, limit, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, collection, addDoc, deleteDoc, query, where, limit, getDocs, serverTimestamp, Timestamp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 const app=getApp(), db=getFirestore(app);
 // Keep the session on the device explicitly; fall back to localStorage where IndexedDB is unavailable.
 let auth;
@@ -6569,7 +6576,12 @@ window.mvAccount={
     const userName=first.length>1?first[0]+' '+first[first.length-1][0]+'.':first[0];
     await addDoc(collection(db,'stationReports'),{stationKey:String(r.stationKey).slice(0,300),stationName:String(r.stationName||'').slice(0,120),brand:String(r.brand||'').slice(0,80),status:r.status,comment:String(r.comment||'').trim().slice(0,280),uid:u.uid,userName,createdAt:serverTimestamp()});
   },
-  async deleteReport(id){await deleteDoc(doc(db,'stationReports',id))}
+  async deleteReport(id){await deleteDoc(doc(db,'stationReports',id))},
+  // All reports since a time (single-field range: no composite index needed). Readable without an account.
+  async recentReports(sinceMs){
+    const snap=await getDocs(query(collection(db,'stationReports'),where('createdAt','>=',Timestamp.fromMillis(sinceMs)),limit(2000)));
+    return snap.docs.map(d=>({id:d.id,...d.data()}));
+  }
 };
 onAuthStateChanged(auth,user=>{diag('auth state: '+(user?'signed in ('+(user.email||user.uid)+')':'signed out'));authReady=true;rememberUser(user);emit();if(user)pull(user).catch(err=>{diag('sync error '+(err.code||'')+' '+(err.message||''));console.warn('MolaVolt eşitleme:',err)});},err=>diag('auth observer error '+(err&&err.code||'')+' '+(err&&err.message||'')));
 document.dispatchEvent(new CustomEvent('mv-account-ready'));
@@ -6640,7 +6652,7 @@ document.dispatchEvent(new CustomEvent('mv-account-ready'));
       if(!choice){alert('Önce istasyonun durumunu seç.');return}
       const k='mv_report_'+current.key;try{const t=Number(localStorage.getItem(k)||0);if(Date.now()-t<10*60e3){alert('Bu istasyon için az önce bildirim yaptın. Biraz sonra tekrar deneyebilirsin.');return}}catch(_){}
       send.disabled=true;send.textContent='Gönderiliyor…';
-      try{await acct().addReport({stationKey:current.key,stationName:current.name,brand:current.brand,status:choice,comment:(document.getElementById('mvReportText')||{}).value||''});try{localStorage.setItem(k,String(Date.now()))}catch(_){}choice='';if(typeof routeToast==='function')routeToast('Bildirimin için teşekkürler');renderReportsSection();}
+      try{await acct().addReport({stationKey:current.key,stationName:current.name,brand:current.brand,status:choice,comment:(document.getElementById('mvReportText')||{}).value||''});try{localStorage.setItem(k,String(Date.now()))}catch(_){}choice='';if(typeof routeToast==='function')routeToast('Bildirimin için teşekkürler');if(window.mvRefreshCommunity)window.mvRefreshCommunity();renderReportsSection();}
       catch(err){alert('Bildirim gönderilemedi: '+(err&&err.message||err));send.disabled=false;send.textContent='Bildirimi gönder';}
     };
   }
@@ -6685,6 +6697,91 @@ document.dispatchEvent(new CustomEvent('mv-account-ready'));
   document.addEventListener('mv-account',renderAll2);
   document.addEventListener('mv-account-ready',renderAll2);
   renderAll2();
+})();
+</script>
+
+<style id="mv-community-1018">
+.mvOfficial{display:block;margin-top:8px;font-size:12px;font-weight:700;color:var(--muted)!important;text-decoration:none}
+.mvTrip{position:fixed;left:10px;right:10px;bottom:calc(92px + env(safe-area-inset-bottom,0px));z-index:9998;border-radius:24px;padding:16px;background:var(--surface,#0f1d2e);border:1px solid var(--line);box-shadow:0 18px 50px rgba(0,0,0,.35);color:var(--text)}
+.mvTrip[hidden]{display:none}
+.mvTrip b{display:block;font-size:16px}
+.mvTrip p{margin:4px 0 12px;font-size:13px;color:var(--muted)}
+.mvTripBtns{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.mvTripBtns button{height:48px;border-radius:14px;border:1px solid var(--line);background:rgba(127,127,127,.08);color:var(--text);font-weight:800;font-size:13px;font-family:inherit;cursor:pointer}
+.mvTripBtns button.ok{border-color:rgba(47,240,143,.5)}.mvTripBtns button.busy{border-color:rgba(255,176,59,.5)}.mvTripBtns button.off{border-color:rgba(255,99,99,.5)}
+.mvTripSkip{margin-top:8px;width:100%;height:40px;border:0;background:transparent;color:var(--muted);font-weight:700;font-family:inherit;cursor:pointer}
+html[data-theme="light"] .mvTrip{background:#fff}
+</style>
+<div class="mvTrip" id="mvTrip" hidden role="dialog" aria-live="polite" aria-label="İstasyon durumu sorusu"></div>
+<script id="mv-community-js-1018">
+/* MV_COMMUNITY_1018: driver reports become the station status where no live operator/Google data exists,
+   and drivers returning from a route are asked one question so the data keeps flowing. */
+(function(){
+  const TTL_MIN={working:120,busy:45,broken:24*60};
+  const LABEL={working:'Çalışıyor',busy:'Dolu bildirildi',broken:'Arızalı bildirildi'};
+  const KEY={working:'ok',busy:'busy',broken:'off'};
+  let byKey=new Map(),loading=false;
+  const keyOf=s=>typeof window.mvFavKey==='function'?window.mvFavKey(s):String(s.name)+'|'+Number(s.lat).toFixed(5)+'|'+Number(s.lon).toFixed(5);
+  const ts=r=>r.createdAt&&r.createdAt.toMillis?r.createdAt.toMillis():0;
+  window.mvCommunityStatus=function(s){
+    const g=byKey.get(keyOf(s));if(!g)return null;
+    const r=g.latest,age=(Date.now()-ts(r))/60000;
+    if(!(age<=TTL_MIN[r.status]))return null;
+    return {key:KEY[r.status],label:LABEL[r.status],status:r.status,at:ts(r),count:g.recent};
+  };
+  async function load(){
+    if(loading||!window.mvAccount||typeof window.mvAccount.recentReports!=='function')return;
+    loading=true;
+    try{
+      const list=await window.mvAccount.recentReports(Date.now()-24*3600e3);
+      const m=new Map();
+      list.forEach(r=>{if(!r.stationKey||!LABEL[r.status])return;const g=m.get(r.stationKey)||{latest:null,recent:0};if(!g.latest||ts(r)>ts(g.latest))g.latest=r;if(Date.now()-ts(r)<2*3600e3)g.recent++;m.set(r.stationKey,g)});
+      byKey=m;
+      try{renderCards();if(window.renderHomeStationMap)setTimeout(window.renderHomeStationMap,50)}catch(_){}
+      if(window.mvDiag)window.mvDiag('community reports: '+list.length+' in 24 h, '+m.size+' stations');
+    }catch(err){if(window.mvDiag)window.mvDiag('community load error '+(err.code||'')+' '+(err.message||''))}
+    finally{loading=false}
+  }
+  window.mvRefreshCommunity=load;
+  document.addEventListener('mv-account-ready',load);
+  if(window.mvAccount)load();
+  setInterval(()=>{if(document.visibilityState==='visible')load()},2*60*1000);
+
+  // ---- "Şarj edebildin mi?" after a route ----
+  const TRIP='molavolt_pending_trip';
+  const readTrip=()=>{try{return JSON.parse(localStorage.getItem(TRIP)||'null')}catch(_){return null}};
+  const clearTrip=()=>{try{localStorage.removeItem(TRIP)}catch(_){};const el=document.getElementById('mvTrip');if(el)el.hidden=true};
+  document.addEventListener('click',ev=>{
+    const a=ev.target.closest&&ev.target.closest('a[data-route-for]');if(!a)return;
+    const id=a.getAttribute('data-route-for');
+    const s=(stations||[]).find(x=>x.id===id)||(window.mvFavStations?window.mvFavStations().find(x=>x.id===id):null);
+    if(!s)return;
+    try{localStorage.setItem(TRIP,JSON.stringify({key:keyOf(s),name:String(s.name||''),brand:String(s.brand||''),at:Date.now()}))}catch(_){}
+  },true);
+  function ask(){
+    const t=readTrip();if(!t)return;
+    const age=(Date.now()-t.at)/60000;
+    if(age>6*60){clearTrip();return}
+    if(age<4)return; // still on the way
+    const el=document.getElementById('mvTrip');if(!el||!el.hidden)return;
+    const signed=window.mvAccount&&window.mvAccount.user;
+    const name=String(t.name).replace(/^.* · /,'');
+    el.innerHTML=`<b>${esc(name)}</b><p>Şarj edebildin mi? Cevabın diğer sürücülere istasyonun durumunu gösterir.</p>`+
+      (signed?`<div class="mvTripBtns"><button type="button" class="ok" data-st="working">✓ Çalıştı</button><button type="button" class="busy" data-st="busy">⏳ Doluydu</button><button type="button" class="off" data-st="broken">✗ Arızalıydı</button></div>`
+             :`<button type="button" class="mvGoogleBtn" style="margin-top:0" id="mvTripSignIn">Cevaplamak için Google ile giriş yap</button>`)+
+      `<button type="button" class="mvTripSkip" id="mvTripSkip">Gitmedim / sonra</button>`;
+    el.hidden=false;
+    el.querySelectorAll('[data-st]').forEach(b=>b.onclick=async()=>{
+      el.querySelectorAll('button').forEach(x=>x.disabled=true);
+      try{await window.mvAccount.addReport({stationKey:t.key,stationName:t.name,brand:t.brand,status:b.dataset.st,comment:''});try{localStorage.setItem('mv_report_'+t.key,String(Date.now()))}catch(_){}if(typeof routeToast==='function')routeToast('Teşekkürler, durum paylaşıldı');clearTrip();load();}
+      catch(err){alert('Gönderilemedi: '+(err&&err.message||err));el.querySelectorAll('button').forEach(x=>x.disabled=false)}
+    });
+    const si=document.getElementById('mvTripSignIn');if(si)si.onclick=()=>{el.hidden=true;window.mvSignIn&&window.mvSignIn()};
+    document.getElementById('mvTripSkip').onclick=clearTrip;
+  }
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')setTimeout(ask,800)});
+  document.addEventListener('mv-account',()=>setTimeout(ask,800));
+  window.addEventListener('load',()=>setTimeout(ask,3000));
 })();
 </script>
 </body>
