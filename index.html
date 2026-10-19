@@ -863,6 +863,9 @@ html.mv-admin-start .adminOnly{
 if(!app)return;var r=document.documentElement;r.classList.add('mvSplashOn');var done=false,t0=Date.now();
 function hide(){if(done)return;done=true;var el=document.getElementById('mvSplash');if(!el)return;el.classList.add('out');setTimeout(function(){r.classList.remove('mvSplashOn')},350)}
 window.addEventListener('load',function(){var d=700-(Date.now()-t0);if(d>0)setTimeout(hide,d);else hide()});setTimeout(hide,3500);})();</script>
+<script>/* MV_POSFIX_1019: note a real location fix; without one the start position is only the Düzce default. */
+(function(){var g=navigator.geolocation;if(!g)return;['getCurrentPosition','watchPosition'].forEach(function(n){var f=g[n];if(typeof f!=='function')return;g[n]=function(ok){var a=[].slice.call(arguments);a[0]=function(){window.mvHasFix=true;return ok&&ok.apply(this,arguments)};return f.apply(g,a)}});
+window.mvPosKnown=function(){if(window.mvHasFix)return true;try{return !(Math.abs(Number(userPos.lat)-40.840621)<0.0005&&Math.abs(Number(userPos.lon)-31.152219)<0.0005)}catch(_){return false}};})();</script>
 <div id="routeToast" class="routeToast">Rota oluşturuluyor…</div>
 <div class="app">
   <div class="top">
@@ -6947,7 +6950,10 @@ html[data-theme="light"] .mvVeh .edit{background:#f1f5f9}
     if(s){
       const kw=maxKw(s)||50,need=Math.max(0,(80-pct)/100*v.battery),mins=need>0?Math.max(5,Math.round(need/(Math.min(kw,150)*0.85)*60)):0;
       const st=statusOf(s),name=String(s.name||'').replace(/^.* · /,'');
-      next=`<div class="lbl">Sıradaki mola önerisi</div><div class="row"><div style="min-width:0"><h3>${e(name)}</h3><div class="sub">${e(s.brand||'')} · ${e(distText(s))}${kw?' · '+kw+' kW':''}${st?' · '+e(st.label):''}</div></div><div class="time"><b>${mins?mins+' dk':'—'}</b><small>${mins?'%'+pct+' → %80':'şarj gerekmiyor'}</small></div></div><div class="bar"><i style="width:${pct}%"></i></div><div class="acts"><a class="mvBtn primary" data-route-for="${e(s.id)}" href="${e(routeUrl(s))}" target="_blank" rel="noopener">Yola çık</a><button type="button" class="mvBtn ghost" onclick="openDetail('${e(s.id)}')">Detay</button></div>`;
+      // Road distance ≈ 1.3 × straight line; town speed for short hops, highway speed for longer ones.
+      const known=!window.mvPosKnown||window.mvPosKnown(),d=distKey(s),drive=Number.isFinite(d)?Math.max(1,Math.round(d*1.3/(d<15?35:75)*60)):0;
+      const where=known?`${e(distText(s))}${drive?' · ~'+drive+' dk yol':''}`:'konum bekleniyor';
+      next=`<div class="lbl">Sıradaki mola önerisi</div><div class="row"><div style="min-width:0"><h3>${e(name)}</h3><div class="sub">${e(s.brand||'')} · ${where}${kw?' · '+kw+' kW':''}${st?' · '+e(st.label):''}</div></div><div class="time"><b>${mins?mins+' dk':'—'}</b><small>${mins?'şarj %'+pct+' → %80':'şarj gerekmiyor'}</small></div></div><div class="bar"><i style="width:${pct}%"></i></div><div class="acts"><a class="mvBtn primary" data-route-for="${e(s.id)}" href="${e(routeUrl(s))}" target="_blank" rel="noopener">Yola çık</a><button type="button" class="mvBtn ghost" onclick="openDetail('${e(s.id)}')">Detay</button></div>`;
     }
     wrap.innerHTML=`<div class="mvVeh"><div class="ring" role="img" aria-label="Batarya yüzde ${pct}"><svg viewBox="0 0 112 112" aria-hidden="true"><defs><linearGradient id="mvRingGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2ff08f"/><stop offset="1" stop-color="#22d3ee"/></linearGradient></defs><circle cx="56" cy="56" r="48" fill="none" stroke="rgba(127,127,127,.22)" stroke-width="10"/><circle cx="56" cy="56" r="48" fill="none" stroke="${ringColor}" stroke-width="10" stroke-linecap="round" stroke-dasharray="${(C*pct/100).toFixed(1)} ${C.toFixed(1)}"/></svg><div class="val"><div><b>${pct}<span style="font-size:16px">%</span></b><small>batarya</small></div></div></div><div class="info"><div class="lbl">Aracım</div><div class="name">${e(v.name||v.battery+' kWh batarya')}</div><div class="range">≈ ${r} <small>km menzil</small></div></div><button type="button" class="edit" aria-label="Aracı düzenle" onclick="mvEditVehicle()"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button></div><div class="mvNext">${next}</div>`;
   }
@@ -7084,6 +7090,7 @@ html[data-theme] body:not(.admin-mode) .bottomNav.customerOnly .navItem.active s
     if(body&&top&&top.parentNode!==body){top.classList.remove('section');body.appendChild(top)}
     try{renderCards()}catch(_){}
     openModal('mvMolaModal');
+    if(navigator.geolocation)navigator.geolocation.getCurrentPosition(pos=>{userPos={lat:pos.coords.latitude,lon:pos.coords.longitude,accuracy:Math.round(pos.coords.accuracy||0)};try{savePos(userPos);buildStations();applyFilters();renderCards()}catch(_){}},()=>{},{enableHighAccuracy:true,timeout:10000,maximumAge:60000});
   };
 
   // ---- search: jump to the list with the query ----
