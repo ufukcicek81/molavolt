@@ -48,9 +48,27 @@ jobs:
           MOLAVOLT_UPLOAD_KEY_ALIAS: ${{ secrets.MOLAVOLT_UPLOAD_KEY_ALIAS }}
           MOLAVOLT_UPLOAD_KEY_PASSWORD: ${{ secrets.MOLAVOLT_UPLOAD_KEY_PASSWORD }}
         run: gradle :app:bundleRelease --stacktrace
+      - name: Show signing certificate (compare with Play Console > App integrity > Upload key)
+        run: |
+          AAB=$(ls android-release/app/build/outputs/bundle/release/*.aab | head -1)
+          VER=$(grep -E "versionName|versionCode" android-release/app/build.gradle | tr -s ' ' | tr '\n' ' ')
+          {
+            echo "## MolaVolt AAB"
+            echo "- Sürüm: $VER"
+            echo "- İmza durumu: **$MOLAVOLT_SIGNING_STATUS**"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$MOLAVOLT_SIGNING_STATUS" = "signed" ]; then
+            SHA=$(keytool -printcert -jarfile "$AAB" | grep -m1 'SHA256:' | sed 's/.*SHA256: *//')
+            if [ -z "$SHA" ]; then echo "::error::Secrets are set but the AAB is not signed"; exit 1; fi
+            echo "- İmza SHA-256: \`$SHA\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Bu değer Play Console > Uygulama bütünlüğü > **Yükleme anahtarı sertifikası** SHA-256 ile aynı olmalı." >> "$GITHUB_STEP_SUMMARY"
+            echo "Upload certificate SHA-256: $SHA"
+          else
+            echo "- İmza anahtarı secret'ları eksik: bu AAB Play'e YÜKLENEMEZ." >> "$GITHUB_STEP_SUMMARY"
+          fi
       - uses: actions/upload-artifact@v4
         with:
-          name: MolaVolt-API36-${{ env.MOLAVOLT_SIGNING_STATUS }}
+          name: MolaVolt-${{ env.MOLAVOLT_SIGNING_STATUS }}
           path: android-release/app/build/outputs/bundle/release/*.aab
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 30
