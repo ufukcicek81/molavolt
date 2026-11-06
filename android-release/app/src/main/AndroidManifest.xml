@@ -11,7 +11,8 @@
         android:roundIcon="@drawable/ic_launcher"
         android:label="@string/app_name"
         android:theme="@android:style/Theme.Material.NoActionBar"
-        android:supportsRtl="true">
+        android:supportsRtl="true"
+        android:manageSpaceActivity="com.google.androidbrowserhelper.trusted.ManageDataLauncherActivity">
         <meta-data
             android:name="asset_statements"
             android:resource="@string/asset_statements"/>
@@ -52,6 +53,15 @@
             </intent-filter>
         </activity>
         <activity android:name="com.google.androidbrowserhelper.trusted.FocusActivity"/>
+        <!-- LauncherActivity enables this on every start (site settings shortcut); it must be declared or the app crashes. -->
+        <activity
+            android:name="com.google.androidbrowserhelper.trusted.ManageDataLauncherActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <meta-data
+                android:name="android.support.customtabs.trusted.MANAGE_SPACE_URL"
+                android:value="https://molavolt.com/"/>
+        </activity>
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="com.molavolt.app.fileprovider"

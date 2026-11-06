@@ -10,8 +10,8 @@ android {
         applicationId 'com.molavolt.app'
         minSdk 24
         targetSdk 36
-        versionCode 10004
-        versionName '1.0.0.4'
+        versionCode 10005
+        versionName '1.0.0.5'
     }
 
     sourceSets {
