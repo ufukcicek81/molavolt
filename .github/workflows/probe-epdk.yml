@@ -1,0 +1,25 @@
+name: Probe EPDK (temporary diagnostics)
+on:
+  push:
+    branches: [claude/app-analysis-improvements-9n8r2x]
+    paths: ['.github/workflows/probe-epdk.yml']
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: MolaVolt function
+        run: |
+          curl -sS -m 120 -o fn.json -w "HTTP %{http_code} in %{time_total}s\n" "https://molavolt.vercel.app/api/epdk?probe=$GITHUB_RUN_ID" || true
+          python3 - <<'P'
+          import json
+          try: d=json.load(open('fn.json'))
+          except Exception as e: print('not json:', open('fn.json').read()[:1500]); raise SystemExit
+          print('ok:', d.get('ok'), 'keys:', list(d)[:10])
+          for a in d.get('attempts', []): print('---', a.get('label'), a.get('statusCode'), a.get('numRows')); print(a.get('sample','')[:500])
+          P
+      - name: EPDK directly
+        run: |
+          curl -sS -m 60 -X GET -H 'Content-Type: application/json' -H 'Accept: application/json' --data '{}' -o e.txt -w "HTTP %{http_code} size %{size_download}\n" https://apigateway.epdk.gov.tr/sarjIstasyonlari/ || true
+          head -c 1500 e.txt; echo
