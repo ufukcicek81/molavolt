@@ -1088,7 +1088,7 @@ function setLocStatus(msg){
 function $(id){return document.getElementById(id)}function esc(t){return String(t??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
 function loadPos(){try{return JSON.parse(localStorage.getItem('mv_pos')||'null')}catch(e){return null}}function savePos(p){localStorage.setItem('mv_pos',JSON.stringify(p))}
 function distKey(s){const d=s?s.distance:null;return d===null||d===undefined||d===''||!Number.isFinite(Number(d))?Infinity:Number(d)}
-function distText(s){const d=distKey(s);return d===Infinity?'— km':d.toFixed(1)+' km'}
+function distText(s){const d=distKey(s);if(d===Infinity||(window.mvPosKnown&&!window.mvPosKnown()))return '— km';return d.toFixed(1)+' km'}
 function km(a,b,c,d){const R=6371,toRad=x=>x*Math.PI/180;const dLat=toRad(c-a),dLon=toRad(d-b);const x=Math.sin(dLat/2)**2+Math.cos(toRad(a))*Math.cos(toRad(c))*Math.sin(dLon/2)**2;return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x))}
 function getJson(k,d){try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(d))}catch(e){return d}}function setJson(k,v){localStorage.setItem(k,JSON.stringify(v))}
 function epdkStations(){return getJson('molavolt_epdk_stations',[])}function setEpdkStations(v){setJson('molavolt_epdk_stations',v||[])}
@@ -6398,6 +6398,8 @@ html[data-theme="light"] #tab-route .mvGooglePlaceStatus[data-state="success"]{c
 html[data-theme="light"] #tab-route .mvGooglePlaceStatus[data-state="error"]{color:#9a5b00!important}
 html[data-theme="light"] .routeSuggest{background:#fff!important;border:1px solid var(--line)!important;box-shadow:var(--shadow)!important}
 html[data-theme="light"] .routeSuggest button,html[data-theme="light"] .mvGooglePredictionName{color:var(--text)!important}
+html[data-theme="light"] #tab-route .routeSuggest .mvGooglePredictionName{color:var(--text)!important}
+html[data-theme="light"] #tab-route .routeSuggest small{color:var(--muted)!important}
 html[data-theme="light"] .routeDirectCard,html[data-theme="light"] .routeResultCard,html[data-theme="light"] .routeStop{background:#fff!important;border:1px solid var(--line)!important;color:var(--text)!important;box-shadow:var(--shadow)!important}
 html[data-theme="light"] .routeDirectCard.warning{border-color:rgba(245,158,11,.45)!important}
 html[data-theme="light"] .routeEffectNote,html[data-theme="light"] .routeEffectNote *{color:#24364a!important}
@@ -7134,6 +7136,25 @@ html[data-theme] body:not(.admin-mode) .bottomNav.customerOnly .navItem.active s
 
   // start on the map (and mark the rebuilt bar's active tab)
   showTab(typeof activeCustomerTab==='string'&&activeCustomerTab?activeCustomerTab:'home');
+})();
+</script>
+<script>/* MV_LOCNOTE_1107: without a location fix, say so above the list and offer to use the location. */
+(function(){
+  const css=document.createElement('style');
+  css.textContent='.mvLocNote{display:flex;gap:12px;align-items:center;margin:0 0 14px;padding:12px 14px;border-radius:16px;background:rgba(255,182,72,.12);border:1px solid rgba(255,182,72,.45)}.mvLocNote p{margin:0;flex:1;font-size:13px;line-height:1.35}.mvLocNote button{flex:0 0 auto;border:0;border-radius:12px;padding:10px 12px;font:inherit;font-weight:800;font-size:13px;background:var(--accentGrad);color:var(--onAccent)}';
+  document.head.appendChild(css);
+  function sync(){
+    const list=document.getElementById('stationCards');if(!list)return;
+    let note=document.getElementById('mvLocNote');
+    const known=!window.mvPosKnown||window.mvPosKnown();
+    if(known){if(note)note.remove();return}
+    if(!note){note=document.createElement('div');note.id='mvLocNote';note.className='mvLocNote';note.setAttribute('role','status');
+      note.innerHTML='<p><b>Konumun alınamadı.</b> Mesafeler gösterilemiyor, liste Düzce merkezine göre sıralı.</p><button type="button">Konumumu kullan</button>';
+      note.querySelector('button').addEventListener('click',()=>{if(window.mvLocateMe)window.mvLocateMe()});
+      list.parentNode.insertBefore(note,list)}
+  }
+  const base=renderCards;renderCards=function(){const r=base.apply(this,arguments);try{sync()}catch(_){}return r};window.renderCards=renderCards;
+  sync();
 })();
 </script>
 </body>
