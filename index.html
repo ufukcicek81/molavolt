@@ -5237,7 +5237,7 @@ setTimeout(function(){try{document.documentElement.classList.add('mv-boot-ready'
       if(mapError)return;
       if(!map){
         el.replaceChildren();
-        map=new google.maps.Map(el,{center:{lat:39,lng:35},zoom:6,mapTypeId:satellite?'satellite':'roadmap',mapTypeControl:false,fullscreenControl:false,streetViewControl:false,gestureHandling:(document.querySelector('.homeMapWrap.homeMapFullscreen')?'greedy':'cooperative'),clickableIcons:false});
+        map=new google.maps.Map(el,{center:{lat:39,lng:35},zoom:6,mapTypeId:satellite?'satellite':'roadmap',mapTypeControl:false,fullscreenControl:false,streetViewControl:false,cameraControl:false,gestureHandling:(document.querySelector('.homeMapWrap.homeMapFullscreen')?'greedy':'cooperative'),clickableIcons:false});
         info=new google.maps.InfoWindow();
         firstPaint=true;
       }
@@ -7040,7 +7040,7 @@ body.mvMapHome .mvPromo[hidden]+.mvMapSearch{top:calc(env(safe-area-inset-top,0p
 :root{--mvSurf:rgba(255,255,255,.96)}
 html[data-theme="dark"]{--mvSurf:rgba(16,26,40,.94)}
 /* bottom bar: dark in both themes */
-html[data-theme] body:not(.admin-mode) .bottomNav.customerOnly,body:not(.admin-mode) .bottomNav.customerOnly{z-index:100006!important;display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;align-items:end!important;background:#0b1422!important;border:1px solid rgba(255,255,255,.08)!important;border-radius:26px!important;padding:8px 6px!important;overflow:visible!important}
+html[data-theme] body:not(.admin-mode) .bottomNav.customerOnly,body:not(.admin-mode) .bottomNav.customerOnly{transform:none!important;z-index:100006!important;display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;align-items:end!important;background:#0b1422!important;border:1px solid rgba(255,255,255,.08)!important;border-radius:26px!important;padding:8px 6px!important;overflow:visible!important}
 body:not(.admin-mode) .bottomNav.customerOnly .navItem{color:#8ea0b5!important;background:transparent!important}
 body:not(.admin-mode) .bottomNav.customerOnly .navItem.active{color:#fff!important;background:transparent!important}
 body:not(.admin-mode) .bottomNav.customerOnly .navItem.active svg{stroke:#fff!important}
