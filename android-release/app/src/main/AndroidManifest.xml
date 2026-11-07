@@ -70,6 +70,7 @@
         <activity
             android:name="com.google.androidbrowserhelper.trusted.WebViewFallbackActivity"
             android:configChanges="orientation|screenSize"/>
+        <activity android:name="com.google.androidbrowserhelper.locationdelegation.PermissionRequestActivity"/>
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="com.molavolt.app.fileprovider"
@@ -80,7 +81,7 @@
                 android:resource="@xml/filepaths"/>
         </provider>
         <service
-            android:name="com.google.androidbrowserhelper.trusted.DelegationService"
+            android:name="com.molavolt.app.DelegationService"
             android:exported="true"
             tools:ignore="ExportedService">
             <intent-filter>

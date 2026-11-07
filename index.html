@@ -7109,7 +7109,7 @@ html[data-theme] body:not(.admin-mode) .bottomNav.customerOnly .navItem.active s
   window.mvLocateMe=function(){
     const center=()=>{const la=Number(userPos&&userPos.lat),lo=Number(userPos&&userPos.lon);if(window.mvCenterMap)window.mvCenterMap(la,lo,13)};
     if(!navigator.geolocation){center();return}
-    navigator.geolocation.getCurrentPosition(pos=>{userPos={lat:pos.coords.latitude,lon:pos.coords.longitude};try{savePos(userPos);buildStations();applyFilters()}catch(_){}center();},()=>{center();alert('Konum alınamadı. Telefonun konum iznini kontrol et.')},{enableHighAccuracy:true,timeout:10000,maximumAge:60000});
+    navigator.geolocation.getCurrentPosition(pos=>{userPos={lat:pos.coords.latitude,lon:pos.coords.longitude};try{savePos(userPos);buildStations();applyFilters()}catch(_){}center();},err=>{center();if(window.mvLocHelp)window.mvLocHelp(err);else alert('Konum alınamadı. Telefonun konum iznini kontrol et.')},{enableHighAccuracy:true,timeout:10000,maximumAge:60000});
   };
 
   // ---- sponsor ticker ----
@@ -7155,6 +7155,50 @@ html[data-theme] body:not(.admin-mode) .bottomNav.customerOnly .navItem.active s
   }
   const base=renderCards;renderCards=function(){const r=base.apply(this,arguments);try{sync()}catch(_){}return r};window.renderCards=renderCards;
   sync();
+})();
+</script>
+<div class="modal" id="mvLocModal"><div class="sheet"><button class="close" onclick="closeModal('mvLocModal')" aria-label="Kapat">×</button><div id="mvLocBody"></div></div></div>
+<script>/* MV_LOCASK_1107: ask for the location on first open, and explain how to turn it on when it is blocked. */
+(function(){
+  const ASKED='molavolt_loc_asked';
+  const pin='<div class="mvLocIcon" aria-hidden="true"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6 7-11a7 7 0 1 0-14 0c0 5 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg></div>';
+  const css=document.createElement('style');
+  css.textContent='.mvLocIcon{width:58px;height:58px;border-radius:18px;display:grid;place-items:center;background:var(--accentGrad);color:var(--onAccent);margin-bottom:14px}#mvLocBody h2{margin:0 0 8px}#mvLocBody p{margin:0 0 14px;line-height:1.45}#mvLocBody ol{margin:0 0 16px;padding-left:20px;line-height:1.55}#mvLocBody .row{display:flex;gap:10px}#mvLocBody .row .mvBtn{flex:1}';
+  document.head.appendChild(css);
+  const body=()=>document.getElementById('mvLocBody');
+  function ask(){
+    try{localStorage.setItem(ASKED,'1')}catch(_){}
+    try{closeModal('mvLocModal')}catch(_){}
+    if(window.mvLocateMe)window.mvLocateMe();
+  }
+  window.mvAskLocation=ask;
+  function welcome(){
+    const b=body();if(!b)return;
+    b.innerHTML=pin+'<h2>Konumunu paylaş</h2><p>Yakındaki şarj istasyonlarını, gerçek mesafeleri ve sana en uygun molayı gösterebilmemiz için konumuna ihtiyacımız var. Konumun yalnızca bu cihazda kullanılır.</p><div class="row"><button type="button" class="mvBtn ghost" id="mvLocLater">Şimdi değil</button><button type="button" class="mvBtn primary" id="mvLocYes">Konumu kullan</button></div>';
+    b.querySelector('#mvLocYes').onclick=ask;
+    b.querySelector('#mvLocLater').onclick=()=>{try{localStorage.setItem(ASKED,'1')}catch(_){}closeModal('mvLocModal')};
+    openModal('mvLocModal');
+  }
+  // err.code: 1 permission denied, 2 position unavailable (location off), 3 timeout
+  window.mvLocHelp=function(err){
+    const b=body();if(!b)return;
+    const off=err&&err.code===2, slow=err&&err.code===3;
+    b.innerHTML=pin+(off||slow
+      ?'<h2>Konum servisi kapalı olabilir</h2><p>Telefonun konumu alınamadı. Ekranın üstünden aşağı kaydırıp <b>Konum</b> düğmesini aç, sonra tekrar dene.</p>'
+      :'<h2>Konum izni gerekli</h2><p>MolaVolt’un konumuna erişimi kapalı. Açmak için:</p><ol><li>Telefonun <b>Ayarlar</b> uygulamasını aç.</li><li><b>Uygulamalar → MolaVolt → İzinler → Konum</b> bölümüne gir.</li><li><b>Uygulamayı kullanırken izin ver</b> ve <b>Hassas konum</b>u seç.</li></ol><p style="font-size:13px" class="muted">Orada izin varsa aynı ayarı <b>Uygulamalar → Chrome → İzinler → Konum</b> için de yap.</p>')
+      +'<div class="row"><button type="button" class="mvBtn ghost" onclick="closeModal(\'mvLocModal\')">Kapat</button><button type="button" class="mvBtn primary" id="mvLocRetry">Tekrar dene</button></div>';
+    b.querySelector('#mvLocRetry').onclick=ask;
+    openModal('mvLocModal');
+  };
+  function firstRun(){
+    if(window.mvPosKnown&&window.mvPosKnown())return;
+    let asked=false;try{asked=localStorage.getItem(ASKED)==='1'}catch(_){}
+    const go=state=>{if(state==='granted'){if(window.mvLocateMe)window.mvLocateMe();return}if(!asked)welcome()};
+    try{navigator.permissions.query({name:'geolocation'}).then(r=>go(r.state),()=>go('prompt'))}catch(_){go('prompt')}
+  }
+  // the list notice button goes through the same flow
+  document.addEventListener('click',ev=>{const t=ev.target.closest&&ev.target.closest('#mvLocNote button');if(t){ev.stopImmediatePropagation();ev.preventDefault();ask()}},true);
+  setTimeout(firstRun,2500);
 })();
 </script>
 </body>
