@@ -1473,7 +1473,7 @@ function locateSort(){
   }
 }
 function init(){
-  isAdmin=new URLSearchParams(location.search).get('admin')===ADMIN_KEY;
+  isAdmin=false; // admin mode is entered only through forceAdminMode0520, after the Google account check
   document.body.classList.toggle('admin-mode',isAdmin);
   if(isAdmin) $('subTitle').textContent='Admin Panel';
   clearLegacySilent();
@@ -2997,11 +2997,10 @@ window.addEventListener('load',()=>{
 
 <script>
 /* UFUK_ADMIN_EASY_LOGIN_0621_JS
-   Basit giriş: MolaVolt logosuna 5 kez hızlı dokun -> şifre: 8790
-   Direkt link: ?admin=ufuk8790 veya #admin=ufuk8790 hâlâ çalışır.
+   Giriş: MolaVolt logosuna 5 kez hızlı dokun veya ?admin=1 linki; panel yalnızca yönetici Google hesabıyla açılır
+   (MV_ADMIN_AUTH_1107).
 */
 (function(){
-  const ADMIN_PASS_0621='8790';
   function clearAdmin0621(){
     try{ localStorage.removeItem('molavolt_force_admin'); }catch(e){}
     try{ sessionStorage.removeItem('molavolt_admin_tap_count'); }catch(e){}
@@ -3024,14 +3023,7 @@ window.addEventListener('load',()=>{
     };
   }
   function openAdminWithPassword0621(){
-    const pass=prompt('Admin şifresi');
-    if(pass===ADMIN_PASS_0621 || String(pass||'').toLowerCase().trim()==='ufuk8790'){
-      try{ localStorage.setItem('molavolt_force_admin','1'); }catch(e){}
-      if(typeof window.forceAdminMode0520==='function') window.forceAdminMode0520();
-      else location.href=location.pathname+'?admin=ufuk8790';
-    }else if(pass!==null){
-      alert('Şifre hatalı');
-    }
+    if(window.mvRequestAdmin) window.mvRequestAdmin();
   }
   function bindLogoTap0621(){
     const logo=document.querySelector('.logo');
@@ -3056,6 +3048,39 @@ window.addEventListener('load',()=>{
     bindLogoTap0621();
     setTimeout(bindLogoTap0621,700);
     if(document.body.classList.contains('admin-mode')) addAdminExit0621();
+  });
+})();
+</script>
+<script>/* MV_ADMIN_AUTH_1107: the admin panel opens only for the admin Google account (no password). Every way in
+   (logo taps, ?admin= link, the remembered flag) goes through forceAdminMode0520, which now waits for Firebase Auth. */
+(function(){
+  const ADMIN='ufuk8790@gmail.com';
+  const real=window.forceAdminMode0520;
+  const acc=()=>window.mvAccount;
+  const isAdminUser=()=>{const u=acc()&&acc().user;return !!(u&&String(u.email||'').toLowerCase()===ADMIN)};
+  let pending=false,entered=false;
+  function enter(){if(entered)return;entered=true;document.documentElement.classList.remove('mv-admin-start');if(real)real()}
+  function forget(){
+    try{localStorage.removeItem('molavolt_force_admin')}catch(_){}
+    if(/[?#&](admin|a|mode|panel)=/i.test(location.search+location.hash))history.replaceState(null,'',location.pathname);
+  }
+  function decide(){
+    if(!pending)return;
+    const a=acc();if(!a||!a.ready)return; // decided when the account state arrives
+    pending=false;
+    if(isAdminUser()){enter();return}
+    if(a.user){forget();alert('Yönetici paneli yalnızca yönetici Google hesabıyla açılır. Şu an '+(a.user.email||'başka bir hesap')+' ile giriş yapılmış; Profil’den çıkış yapıp yönetici hesabıyla gir.');return}
+    if(confirm('Yönetici paneli için yönetici Google hesabınla giriş yapman gerekiyor. Şimdi giriş yapılsın mı?')){pending=true;a.signIn()}
+    else forget();
+  }
+  function request(){document.documentElement.classList.remove('mv-admin-start');if(isAdminUser()){enter();return}pending=true;decide()}
+  window.forceAdminMode0520=function(){request()};
+  try{forceAdminMode0520=window.forceAdminMode0520}catch(_){}
+  window.mvRequestAdmin=request;
+  document.addEventListener('mv-account',()=>{
+    if(pending){decide();return}
+    // signed out, or switched to another account, while the panel is open
+    if(entered&&acc()&&acc().ready&&!isAdminUser()){forget();location.replace(location.pathname)}
   });
 })();
 </script>
