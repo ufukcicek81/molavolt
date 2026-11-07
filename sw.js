@@ -43,3 +43,30 @@ self.addEventListener('fetch', event => {
     }
   })());
 });
+/* MolaVolt 2026-11-07: push notifications (new offers, app updates) sent from the admin panel through api/push. */
+self.addEventListener('push', event => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (_) { data = { body: event.data ? event.data.text() : '' }; }
+  const title = data.title || 'MolaVolt';
+  event.waitUntil(self.registration.showNotification(title, {
+    body: data.body || '',
+    icon: './icon-192.png',
+    badge: './icon-maskable-192.png',
+    tag: data.tag || 'molavolt',
+    data: { url: data.url || './' }
+  }));
+});
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const target = new URL((event.notification.data && event.notification.data.url) || './', self.location.href).href;
+  event.waitUntil((async () => {
+    const inScope = target.startsWith(self.registration.scope);
+    if (inScope) {
+      const list = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+      for (const c of list) {
+        if ('focus' in c) { try { if (c.url !== target && 'navigate' in c) await c.navigate(target); } catch (_) {} return c.focus(); }
+      }
+    }
+    return clients.openWindow(target);
+  })());
+});

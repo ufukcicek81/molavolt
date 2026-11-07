@@ -51,6 +51,26 @@ service cloud.firestore {
       allow delete: if signedIn() && (resource.data.uid == request.auth.uid || isAdmin());
     }
 
+    // Push notification keys (VAPID private key): admin only. api/push reads them with the admin's token.
+    match /molavoltPrivate/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Push subscriptions: any app user may save theirs (only real push service endpoints);
+    // only the admin may read the list or delete entries.
+    match /pushSubs/{subId} {
+      allow create, update: if request.resource.data.keys().hasOnly(['endpoint', 'p256dh', 'auth', 'updatedAt'])
+        && request.resource.data.endpoint is string
+        && request.resource.data.endpoint.size() < 1000
+        && request.resource.data.endpoint.matches('https://(fcm[.]googleapis[.]com|updates[.]push[.]services[.]mozilla[.]com|[a-z0-9-]+[.]notify[.]windows[.]com|web[.]push[.]apple[.]com)/.*')
+        && request.resource.data.p256dh is string
+        && request.resource.data.p256dh.size() < 200
+        && request.resource.data.auth is string
+        && request.resource.data.auth.size() < 100
+        && request.resource.data.updatedAt == request.time;
+      allow read, delete: if isAdmin();
+    }
+
     // Per-user data (favorite stations and brands), private to that user.
     match /users/{uid} {
       allow read, write: if signedIn() && request.auth.uid == uid;

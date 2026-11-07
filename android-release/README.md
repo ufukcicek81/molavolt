@@ -6,7 +6,7 @@ Bu dizin, mevcut **MolaVolt** web uygulamasının Trusted Web Activity (TWA) And
 - Web adresi: `https://molavolt.com/`
 - `compileSdk=36` / `targetSdk=36`; minSdk 24.
 - Android Browser Helper: 2.7.3.
-- `versionCode=10008` / `versionName=1.0.0.8`. **Play Console'daki önceki tüm sürümlerden daha yüksek olduğuna emin olun.**
+- `versionCode=10009` / `versionName=1.0.0.9`. **Play Console'daki önceki tüm sürümlerden daha yüksek olduğuna emin olun.**
 - Uygulama ikonu `icon-512.png`, açılış ekranı `splash-logo.png` dosyasından derlemede otomatik alınır.
 - Doğrulama: `https://molavolt.com/.well-known/assetlinks.json` içinde mevcut Play **uygulama imzalama** SHA-256 kaydı.
 
