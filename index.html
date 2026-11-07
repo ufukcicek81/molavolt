@@ -785,24 +785,28 @@ html.mv-admin-start .adminOnly{
 </style>
 <script>/* MV_API_DOMAIN_1107: some Turkish mobile networks reset connections to *.vercel.app. Requests to the Vercel
    functions first go to our own subdomains (same Vercel projects); if that fails at the network level the original
-   address is used, and the failing subdomain is skipped for the rest of the session. */
+   address is used (and the other way round). */
 (function(){
   var MAP=[['https://molavolt.vercel.app/','https://api.molavolt.com/'],['https://molavolt-route-api.vercel.app/','https://route.molavolt.com/']];
   var nf=window.fetch;if(!nf)return;
+  // a subdomain that failed is tried second for 2 minutes; whichever address fails, the other one is tried too
   var bad={};try{bad=JSON.parse(sessionStorage.getItem('mvAltBad')||'{}')||{}}catch(_){}
   window.mvApiAltBad=bad;
+  function mark(to,v){if(v)bad[to]=Date.now();else delete bad[to];try{sessionStorage.setItem('mvAltBad',JSON.stringify(bad))}catch(_){}}
   window.fetch=function(input,init){
     var url=typeof input==='string'?input:(input&&input.url)||String(input);
     for(var i=0;i<MAP.length;i++){
       var from=MAP[i][0],to=MAP[i][1];
-      if(url.indexOf(from)!==0||bad[to])continue;
+      if(url.indexOf(from)!==0)continue;
       var self=this,args=arguments,alt=to+url.slice(from.length);
       var altInput=(typeof input==='string'||input instanceof URL)?alt:new Request(alt,input);
-      return nf.call(self,altInput,init).catch(function(err){
-        if(init&&init.signal&&init.signal.aborted)throw err;
-        bad[to]=1;try{sessionStorage.setItem('mvAltBad',JSON.stringify(bad))}catch(_){}
-        return nf.apply(self,args);
-      });
+      var viaAlt=function(){return nf.call(self,altInput,init).then(function(r){mark(to,false);return r})};
+      var viaOrig=function(){return nf.apply(self,args)};
+      var aborted=function(){return init&&init.signal&&init.signal.aborted};
+      if(bad[to]&&Date.now()-bad[to]<120000){
+        return viaOrig().catch(function(err){if(aborted())throw err;return viaAlt()});
+      }
+      return viaAlt().catch(function(err){if(aborted())throw err;mark(to,true);return viaOrig()});
     }
     return nf.apply(this,arguments);
   };
@@ -7065,6 +7069,7 @@ html[data-theme="light"] .mvVeh .edit{background:#f1f5f9}
 /* MV_MAPHOME_1018: full-screen map home with sponsor ticker, search + AC/DC, floating buttons and a dark bottom bar with a raised centre button. */
 #mvMapUI{display:none}
 body.mvMapHome #mvMapUI{display:block;position:fixed;inset:0;z-index:100003;pointer-events:none}
+body.admin-mode #mvMapUI,body.admin-mode #mvPromo{display:none!important}
 body.mvMapHome #mvMapUI>*{pointer-events:auto}
 body.mvMapHome .top,body.mvMapHome .mvMainSearch,body.mvMapHome .mvSearchMessage,body.mvMapHome .mvBrandBar,body.mvMapHome #brandChips,body.mvMapHome #mvActiveFilters,body.mvMapHome #tab-home>:not(.homeMapSection){display:none!important}
 body.mvMapHome .homeMapHead,body.mvMapHome .mapFullscreenClose,body.mvMapHome .homeMapLegend,body.mvMapHome .homeMapModeBtns{display:none!important}
