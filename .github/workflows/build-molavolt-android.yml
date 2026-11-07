@@ -47,7 +47,7 @@ jobs:
           MOLAVOLT_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.MOLAVOLT_UPLOAD_KEYSTORE_PASSWORD }}
           MOLAVOLT_UPLOAD_KEY_ALIAS: ${{ secrets.MOLAVOLT_UPLOAD_KEY_ALIAS }}
           MOLAVOLT_UPLOAD_KEY_PASSWORD: ${{ secrets.MOLAVOLT_UPLOAD_KEY_PASSWORD }}
-        run: gradle :app:bundleRelease --stacktrace
+        run: gradle :app:bundleRelease :app:assembleRelease --stacktrace
       - name: Show signing certificate (compare with Play Console > App integrity > Upload key)
         run: |
           AAB=$(ls android-release/app/build/outputs/bundle/release/*.aab | head -1)
@@ -70,5 +70,12 @@ jobs:
         with:
           name: MolaVolt-${{ env.MOLAVOLT_SIGNING_STATUS }}
           path: android-release/app/build/outputs/bundle/release/*.aab
+          if-no-files-found: error
+          retention-days: 30
+      # Same build as an APK for installing directly on a test phone (uninstall the Play version first).
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MolaVolt-test-apk-${{ env.MOLAVOLT_SIGNING_STATUS }}
+          path: android-release/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 30
