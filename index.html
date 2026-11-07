@@ -1039,7 +1039,12 @@ window.mvPosKnown=function(){if(window.mvHasFix)return true;try{return !(Math.ab
         <input id="sp_id" type="hidden">
         <label>Bağlı istasyon</label>
         <select id="sp_station"></select>
-        <p class="muted" style="font-size:12px;margin:0 0 8px">Boş bırakırsan fırsat tüm istasyon kartlarında görünür.</p>
+        <p class="muted" style="font-size:12px;margin:0 0 8px">Boş bırakırsan ve konum da girmezsen fırsat her yerde görünür.</p>
+        <label>İşletme konumu <span class="muted">(enlem, boylam)</span></label>
+        <div style="display:flex;gap:8px"><input id="sp_loc" placeholder="40.8407, 31.1522" inputmode="decimal" style="flex:1"><button type="button" class="secondaryBtn" style="flex:0 0 auto" onclick="mvSponsorHere()">Buradayım</button></div>
+        <p class="muted" style="font-size:12px;margin:4px 0 8px">Google Haritalar’da işletmeye basılı tut, çıkan koordinatı kopyalayıp buraya yapıştır. Konum girilince fırsat yakındaki istasyonlarda ve “Yakındaki fırsatlar” listesinde mesafeye göre görünür.</p>
+        <label>Görünme mesafesi <span class="muted">(km)</span></label>
+        <input id="sp_radius" placeholder="3" inputmode="decimal">
         <label>İşletme adı</label>
         <input id="sp_name" placeholder="Krempark Oto Yıkama">
         <label>İndirim</label>
@@ -6999,6 +7004,7 @@ html[data-theme="light"] .mvVeh .edit{background:#f1f5f9}
     <button type="button" class="mvKind mvKindF" onclick="mvOpenFilters()" aria-label="Filtrele"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg><small>Filtre</small></button>
   </div>
   <div class="mvFab">
+    <button type="button" class="gift" onclick="mvOpenOffers()" aria-label="Yakındaki fırsatlar"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M12 8v13M3 12h18M12 8S10 3 7.5 4.5 9 8 12 8zm0 0s2-5 4.5-3.5S15 8 12 8z"/></svg><span class="n" id="mvOffersN" hidden></span></button>
     <button type="button" onclick="showTab('favorites')" aria-label="Favoriler"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg></button>
     <button type="button" onclick="toggleHomeMapLayer&&toggleHomeMapLayer()" aria-label="Uydu görünümü"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/></svg></button>
     <button type="button" onclick="mvLocateMe()" aria-label="Konumuma git"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="7"/></svg></button>
@@ -7218,6 +7224,127 @@ html[data-theme] body:not(.admin-mode) .bottomNav.customerOnly .navItem.active s
   // the list notice button goes through the same flow
   document.addEventListener('click',ev=>{const t=ev.target.closest&&ev.target.closest('#mvLocNote button');if(t){ev.stopImmediatePropagation();ev.preventDefault();ask()}},true);
   setTimeout(firstRun,2500);
+})();
+</script>
+<div class="modal" id="mvOffersModal"><div class="sheet"><button class="close" onclick="closeModal('mvOffersModal')" aria-label="Kapat">×</button><div id="mvOffersBody"></div></div></div>
+<script>/* MV_OFFERS_1107: offers by location. A sponsor has its own position (lat/lon) or that of its linked station;
+   it shows on stations within its radius and in "Yakındaki fırsatlar", nearest first. Sponsors with neither stay global. */
+(function(){
+  const e=v=>esc(String(v??''));
+  const css=document.createElement('style');
+  css.textContent=`.mvFab button.gift{position:relative;background:#ffb648;color:#2a1600}.mvFab button .n{position:absolute;top:-3px;right:-3px;min-width:20px;height:20px;padding:0 5px;border-radius:10px;background:#e5484d;color:#fff;font:800 11px/20px Manrope,system-ui,sans-serif;box-sizing:border-box}
+.mvOfferNear{display:flex;align-items:center;gap:12px;width:100%;box-sizing:border-box;margin:0 0 14px;padding:12px 14px;border-radius:16px;border:1px solid rgba(255,182,72,.45);background:rgba(255,182,72,.12);color:var(--text);font:inherit;text-align:left;cursor:pointer}
+.mvOfferNear b{display:block;font-size:14px}.mvOfferNear small{color:var(--muted);font-size:12px}.mvOfferNear .go{margin-left:auto;font-weight:800;white-space:nowrap}
+.mvOffer{cursor:pointer}
+.mvOfItem{border:1px solid var(--line);border-radius:18px;padding:14px;margin:0 0 12px;background:var(--mvSurf,transparent)}
+.mvOfTop{display:flex;gap:12px;align-items:flex-start}.mvOfTop .gift,.mvOfTop .sponsorLogo{flex:0 0 44px;width:44px;height:44px;border-radius:12px;display:grid;place-items:center;object-fit:cover}
+.mvOfTop h4{margin:0;font-size:16px}.mvOfTop p{margin:4px 0 0;font-size:13px;color:var(--muted);line-height:1.35}.mvOfDist{margin-left:auto;text-align:right;font-weight:800;white-space:nowrap}.mvOfDist small{display:block;font-weight:500;color:var(--muted);font-size:11px}
+.mvOfSt{margin:10px 0 0;padding:0;list-style:none;font-size:13px}.mvOfSt li{padding:6px 0;border-top:1px solid var(--line);cursor:pointer}.mvOfSt li small{color:var(--muted)}
+.mvOfActs{display:flex;gap:8px;margin-top:12px}.mvOfActs .mvBtn{flex:1;text-align:center}
+.mvOfHead{margin:6px 0 10px;font-size:13px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}`;
+  document.head.appendChild(css);
+
+  const allStations=()=>{try{return (stations&&stations.length?stations:epdkStations())||[]}catch(_){return []}};
+  const findStation=id=>{if(!id)return null;try{return stations.find(x=>x.id===id)||(typeof favStations==='function'?favStations().find(x=>x.id===id):null)||epdkStations().find(x=>x.id===id)||null}catch(_){return null}};
+  function posOf(o){
+    const la=Number(o&&o.lat),lo=Number(o&&o.lon);
+    if(Number.isFinite(la)&&Number.isFinite(lo)&&(la||lo))return {lat:la,lon:lo};
+    const st=findStation(o&&o.stationId);
+    return st&&Number.isFinite(Number(st.lat))?{lat:Number(st.lat),lon:Number(st.lon)}:null;
+  }
+  const radius=o=>{const r=Number(String(o&&o.radiusKm||'').replace(',','.'));return Number.isFinite(r)&&r>0?r:3};
+  window.mvSponsorPos=posOf;
+
+  // offers for one station: its own, those within the sponsor's radius, and global ones
+  stationOffers=function(id){
+    const st=findStation(id);
+    return sponsors().filter(o=>{
+      if(!o||!o.name)return false;
+      if(o.stationId&&o.stationId===id)return true;
+      const p=posOf(o);
+      if(!p)return !o.stationId;
+      return !!st&&km(p.lat,p.lon,Number(st.lat),Number(st.lon))<=radius(o);
+    });
+  };
+  window.stationOffers=stationOffers;
+
+  function nearbyList(){
+    const known=!window.mvPosKnown||window.mvPosKnown();
+    return sponsors().filter(o=>o&&o.name).map(o=>{
+      const p=posOf(o);
+      const d=p?km(Number(userPos.lat),Number(userPos.lon),p.lat,p.lon):Infinity;
+      const near=p?allStations().map(s=>({s,d:km(p.lat,p.lon,Number(s.lat),Number(s.lon))})).filter(x=>x.d<=radius(o)).sort((a,b)=>a.d-b.d).slice(0,3):[];
+      return {o,p,d,near,known};
+    }).sort((a,b)=>a.d-b.d);
+  }
+  const fmt=d=>d<1?Math.round(d*1000/10)*10+' m':d.toFixed(d<10?1:0)+' km';
+  function itemHtml(x,forStation){
+    const o=x.o,logo=typeof sponsorLogoHtml==='function'?sponsorLogoHtml(o):'<div class="gift">🎁</div>';
+    const useAt=forStation||(x.near[0]&&x.near[0].s.id)||o.stationId||'';
+    const dist=x.p&&x.known&&Number.isFinite(x.d)?`<div class="mvOfDist">${e(fmt(x.d))}<small>sana uzaklık</small></div>`:'';
+    const sts=x.near.length?`<ul class="mvOfSt">${x.near.map(n=>`<li onclick="closeModal('mvOffersModal');openDetail('${e(n.s.id)}')">⚡ ${e(typeof displayName==='function'?displayName(n.s):n.s.name)} <small>· işletmeye ${e(fmt(n.d))}</small></li>`).join('')}</ul>`:'';
+    const dir=x.p?`<a class="mvBtn ghost" href="https://www.google.com/maps/dir/?api=1&destination=${x.p.lat},${x.p.lon}&travelmode=driving" target="_blank" rel="noopener">Yol tarifi</a>`:'';
+    return `<div class="mvOfItem"><div class="mvOfTop">${logo}<div style="min-width:0"><h4>${e(o.name)} ${o.discount?`<span class="tag g">${e(o.discount)}</span>`:''}</h4><p>${e(o.offer||'MolaVolt kullanıcılarına özel fırsat')}</p></div>${dist}</div>${sts}<div class="mvOfActs">${dir}<button type="button" class="mvBtn primary" onclick="closeModal('mvOffersModal');useSponsorCoupon('${e(o.id)}','${e(useAt)}')">Fırsatı kullan</button></div></div>`;
+  }
+  // stationId: show only the offers valid at that station
+  window.mvOpenOffers=function(stationId){
+    const b=document.getElementById('mvOffersBody');if(!b)return;
+    let list=nearbyList();
+    const st=stationId?findStation(stationId):null;
+    if(st){const ids=new Set(stationOffers(stationId).map(o=>o.id));list=list.filter(x=>ids.has(x.o.id))}
+    const local=list.filter(x=>x.p),global=list.filter(x=>!x.p);
+    const title=st?`${e(typeof displayName==='function'?displayName(st):st.name)} çevresindeki fırsatlar`:'Yakındaki fırsatlar';
+    const hint=(!window.mvPosKnown||window.mvPosKnown())?'':'<p class="muted" style="margin:0 0 12px;font-size:13px">Konumun alınamadığı için mesafeler gösterilmiyor.</p>';
+    b.innerHTML=`<h2 style="margin:0 0 6px">${title}</h2><p class="muted" style="margin:0 0 14px">Şarj olurken yakındaki işletmelerde MolaVolt’a özel indirimler.</p>${hint}`
+      +(local.length?local.map(x=>itemHtml(x,stationId)).join(''):'')
+      +(global.length?`${local.length?'<div class="mvOfHead">Her yerde geçerli</div>':''}${global.map(x=>itemHtml(x,stationId)).join('')}`:'')
+      +(list.length?'':'<p class="muted">Şu an fırsat yok.</p>');
+    openModal('mvOffersModal');
+  };
+
+  function sync(){
+    const list=nearbyList(),near=list.filter(x=>x.p&&x.d<=Math.max(15,radius(x.o))).length,n=near||list.length;
+    const badge=document.getElementById('mvOffersN');if(badge){badge.hidden=!n;badge.textContent=n>9?'9+':String(n)}
+    const cards=document.getElementById('stationCards');if(!cards)return;
+    let el=document.getElementById('mvOfferNear');
+    if(!list.length){if(el)el.remove();return}
+    if(!el){el=document.createElement('button');el.type='button';el.id='mvOfferNear';el.className='mvOfferNear';el.onclick=()=>mvOpenOffers();cards.parentNode.insertBefore(el,cards)}
+    const first=list[0];
+    el.innerHTML=`<span style="font-size:24px" aria-hidden="true">🎁</span><span><b>${near?`Yakınında ${near} fırsat var`:`${list.length} fırsat var`}</b><small>${e(first.o.name)}${first.o.discount?' · '+e(first.o.discount):''}${first.p&&first.known?' · '+e(fmt(first.d)):''}</small></span><span class="go">Gör ›</span>`;
+  }
+  const baseCards=renderCards;renderCards=function(){const r=baseCards.apply(this,arguments);try{sync()}catch(_){}return r};window.renderCards=renderCards;
+  // the "🎁 n fırsat" pill on a card opens that station's offers instead of the detail page
+  document.addEventListener('click',ev=>{const pill=ev.target.closest&&ev.target.closest('.mvOffer');if(!pill)return;const card=pill.closest('.mvCard');const m=card&&String(card.getAttribute('onclick')||'').match(/openDetail\('([^']+)'\)/);if(!m)return;ev.stopPropagation();ev.preventDefault();mvOpenOffers(m[1].replace(/&#39;/g,"'"))},true);
+
+  // admin: store the business position and radius with the sponsor
+  window.mvSponsorHere=function(){
+    if(!navigator.geolocation)return alert('Konum desteklenmiyor.');
+    navigator.geolocation.getCurrentPosition(p=>{const el=document.getElementById('sp_loc');if(el)el.value=p.coords.latitude.toFixed(6)+', '+p.coords.longitude.toFixed(6)},()=>alert('Konum alınamadı.'),{enableHighAccuracy:true,timeout:15000,maximumAge:0});
+  };
+  function readLoc(){
+    const v=(document.getElementById('sp_loc')||{}).value||'';const m=v.match(/(-?\d+(?:[.,]\d+)?)\s*[,; ]\s*(-?\d+(?:[.,]\d+)?)/);
+    if(!m)return null;const la=parseFloat(m[1].replace(',','.')),lo=parseFloat(m[2].replace(',','.'));
+    return Number.isFinite(la)&&Number.isFinite(lo)&&Math.abs(la)<=90&&Math.abs(lo)<=180?{lat:la,lon:lo}:null;
+  }
+  const baseSave=window.saveSponsor;
+  if(typeof baseSave==='function'){window.saveSponsor=function(){
+    const idEl=document.getElementById('sp_id');if(idEl&&!idEl.value)idEl.value='sp-'+Date.now();
+    const id=idEl&&idEl.value,loc=readLoc(),rad=(document.getElementById('sp_radius')||{}).value||'';
+    const raw=(document.getElementById('sp_loc')||{}).value||'';
+    if(raw.trim()&&!loc){alert('İşletme konumu anlaşılamadı. Örnek: 40.8407, 31.1522');return}
+    const r=baseSave.apply(this,arguments);
+    const arr=sponsors(),i=arr.findIndex(x=>x.id===id);
+    if(i>=0){const o=arr[i];if(loc){o.lat=loc.lat;o.lon=loc.lon}else{delete o.lat;delete o.lon}const rv=Number(String(rad).replace(',','.'));if(rv>0)o.radiusKm=rv;else delete o.radiusKm;setSponsors(arr);try{renderCards()}catch(_){}}
+    ['sp_loc','sp_radius'].forEach(k=>{const el=document.getElementById(k);if(el)el.value=''});
+    return r};try{saveSponsor=window.saveSponsor}catch(_){}}
+  const baseEdit=window.editSponsor;
+  if(typeof baseEdit==='function'){window.editSponsor=function(id){const r=baseEdit.apply(this,arguments);const o=sponsors().find(x=>x.id===id);
+    const l=document.getElementById('sp_loc'),rd=document.getElementById('sp_radius');
+    if(l)l.value=o&&Number.isFinite(Number(o.lat))&&o.lat!==undefined?o.lat+', '+o.lon:'';if(rd)rd.value=o&&o.radiusKm?o.radiusKm:'';return r};try{editSponsor=window.editSponsor}catch(_){}}
+  const baseClear=window.clearSponsorForm;
+  window.clearSponsorForm=function(){if(baseClear)baseClear.apply(this,arguments);['sp_loc','sp_radius'].forEach(k=>{const el=document.getElementById(k);if(el)el.value=''})};try{clearSponsorForm=window.clearSponsorForm}catch(_){}
+
+  sync();setTimeout(sync,3000);
 })();
 </script>
 </body>
