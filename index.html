@@ -783,6 +783,31 @@ html.mv-admin-start .adminOnly{
 .homeMapWrap .marker-cluster-small div,.homeMapWrap .marker-cluster-medium div,.homeMapWrap .marker-cluster-large div{background:rgba(7,17,29,.94)!important;color:#35ef8d!important;border:2px solid #35ef8d;font-weight:900}
 .homeMapWrap .leaflet-tooltip.mvPriceTip{background:rgba(7,17,29,.94);border:1px solid rgba(53,239,141,.35);color:#35ef8d;font-weight:900;border-radius:9px;box-shadow:0 4px 14px rgba(0,0,0,.3)}
 </style>
+<script>/* MV_API_DOMAIN_1107: some Turkish mobile networks reset connections to *.vercel.app. Requests to the Vercel
+   functions first go to our own subdomains (same Vercel projects); if that fails at the network level the original
+   address is used, and the failing subdomain is skipped for the rest of the session. */
+(function(){
+  var MAP=[['https://molavolt.vercel.app/','https://api.molavolt.com/'],['https://molavolt-route-api.vercel.app/','https://route.molavolt.com/']];
+  var nf=window.fetch;if(!nf)return;
+  var bad={};try{bad=JSON.parse(sessionStorage.getItem('mvAltBad')||'{}')||{}}catch(_){}
+  window.mvApiAltBad=bad;
+  window.fetch=function(input,init){
+    var url=typeof input==='string'?input:(input&&input.url)||String(input);
+    for(var i=0;i<MAP.length;i++){
+      var from=MAP[i][0],to=MAP[i][1];
+      if(url.indexOf(from)!==0||bad[to])continue;
+      var self=this,args=arguments,alt=to+url.slice(from.length);
+      var altInput=(typeof input==='string'||input instanceof URL)?alt:new Request(alt,input);
+      return nf.call(self,altInput,init).catch(function(err){
+        if(init&&init.signal&&init.signal.aborted)throw err;
+        bad[to]=1;try{sessionStorage.setItem('mvAltBad',JSON.stringify(bad))}catch(_){}
+        return nf.apply(self,args);
+      });
+    }
+    return nf.apply(this,arguments);
+  };
+})();
+</script>
 <script>
 /* UFUK_REFRESH_NO_FLASH_ROUTE_FAST_0633: yenilemede yanlış/admin ekranı parlamasını engeller */
 (function(){
