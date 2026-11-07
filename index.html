@@ -865,6 +865,15 @@ function hide(){if(done)return;done=true;var el=document.getElementById('mvSplas
 window.addEventListener('load',function(){var d=700-(Date.now()-t0);if(d>0)setTimeout(hide,d);else hide()});setTimeout(hide,3500);})();</script>
 <script>/* MV_POSFIX_1019: note a real location fix; without one the start position is only the Düzce default. */
 (function(){var g=navigator.geolocation;if(!g)return;['getCurrentPosition','watchPosition'].forEach(function(n){var f=g[n];if(typeof f!=='function')return;g[n]=function(ok){var a=[].slice.call(arguments);a[0]=function(){window.mvHasFix=true;return ok&&ok.apply(this,arguments)};return f.apply(g,a)}});
+/* A one-shot request that fails with "unavailable" (2) or "timeout" (3) is often only the GPS not having a fix yet,
+   e.g. indoors, or Android's fused provider briefly reporting no location. Retry once with network accuracy, a
+   longer wait and a recent cached position before reporting the error; a refused permission (1) is reported at once. */
+var one=g.getCurrentPosition;g.getCurrentPosition=function(ok,fail,opt){
+  return one.call(g,ok,function(err){
+    if(!err||err.code===1){return fail&&fail.apply(this,arguments)}
+    one.call(g,ok,function(){return fail&&fail.apply(this,arguments)},{enableHighAccuracy:false,timeout:20000,maximumAge:600000});
+  },opt);
+};
 try{if(String(document.referrer).indexOf('android-app://com.molavolt.app')===0)sessionStorage.setItem('mvInApp','1')}catch(_){}
 window.mvPosKnown=function(){if(window.mvHasFix)return true;try{return !(Math.abs(Number(userPos.lat)-40.840621)<0.0005&&Math.abs(Number(userPos.lon)-31.152219)<0.0005)}catch(_){return false}};})();</script>
 <div id="routeToast" class="routeToast">Rota oluşturuluyor…</div>
@@ -7191,7 +7200,7 @@ html[data-theme] body:not(.admin-mode) .bottomNav.customerOnly .navItem.active s
     const b=body();if(!b)return;
     const off=err&&err.code===2, slow=err&&err.code===3;
     b.innerHTML=pin+(off||slow
-      ?'<h2>Konum servisi kapalı olabilir</h2><p>Telefonun konumu alınamadı. Ekranın üstünden aşağı kaydırıp <b>Konum</b> düğmesini aç, sonra tekrar dene.</p>'
+      ?'<h2>Konumun bulunamadı</h2><p>Telefon şu an konumunu belirleyemedi. Ekranın üstünden aşağı kaydırıp <b>Konum</b> düğmesinin açık olduğunu kontrol et. Açıksa kapalı alanda olabilirsin; birkaç saniye sonra tekrar dene.</p>'
       :'<h2>Konum izni gerekli</h2><p>MolaVolt’un konumuna erişimi kapalı. Açmak için:</p><ol><li>Telefonun <b>Ayarlar</b> uygulamasını aç.</li><li><b>Uygulamalar → MolaVolt → İzinler → Konum</b> bölümüne gir.</li><li><b>Uygulamayı kullanırken izin ver</b> ve <b>Hassas konum</b>u seç.</li></ol><p style="font-size:13px" class="muted">Orada izin varsa aynı ayarı <b>Uygulamalar → Chrome → İzinler → Konum</b> için de yap.</p>')
       +(inApp()&&!off&&!slow?'<button type="button" class="mvBtn primary block" style="width:100%;margin-bottom:10px" id="mvLocSettings">Ayarları aç</button>':'')
       +'<div class="row"><button type="button" class="mvBtn ghost" onclick="closeModal(\'mvLocModal\')">Kapat</button><button type="button" class="mvBtn '+(inApp()&&!off&&!slow?'ghost':'primary')+'" id="mvLocRetry">Tekrar dene</button></div>';
