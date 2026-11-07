@@ -7373,5 +7373,142 @@ html[data-theme] body:not(.admin-mode) .bottomNav.customerOnly .navItem.active s
 })();
 </script>
 <style>#mvHomeTop .time .cap,.mvNext .time .cap{display:block;font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);margin-bottom:2px}</style>
+<div class="modal" id="mvPushModal"><div class="sheet"><button class="close" onclick="closeModal('mvPushModal')" aria-label="Kapat">×</button><div id="mvPushBody"></div></div></div>
+<script type="module">/* MV_PUSH_1107: push notifications. Users opt in once; the subscription goes to Firestore pushSubs.
+   The admin creates the VAPID key pair in the panel (private half in molavoltPrivate/push, public half in
+   molavolt/push) and sends messages through api/push, which checks the admin's Google sign-in. */
+import { getApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+const db=getFirestore(getApp());
+const PUSH_API='https://molavolt.vercel.app/api/push';
+const ASKED='molavolt_push_asked', SYNCED='molavolt_push_synced';
+const PLAY_URL='https://play.google.com/store/apps/details?id=com.molavolt.app';
+const e=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const supported=()=>'serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window;
+const b64u=buf=>btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+const unb64u=s=>Uint8Array.from(atob(s.replace(/-/g,'+').replace(/_/g,'/')+'==='.slice((s.length+3)%4)),c=>c.charCodeAt(0));
+const inApp=()=>{try{return sessionStorage.getItem('mvInApp')==='1'}catch(_){return false}};
+let pub=null;
+async function publicKey(){if(pub)return pub;const snap=await getDoc(doc(db,'molavolt','push'));pub=snap.exists()?snap.data().publicKey||null:null;return pub}
+async function subscribe(){
+  const key=await publicKey();if(!key)throw new Error('Bildirim anahtarı henüz oluşturulmadı.');
+  const reg=await navigator.serviceWorker.ready;
+  let sub=await reg.pushManager.getSubscription();
+  // a subscription made with an older key cannot receive messages any more
+  if(sub&&sub.options&&sub.options.applicationServerKey&&b64u(sub.options.applicationServerKey)!==key){await sub.unsubscribe().catch(()=>{});sub=null}
+  if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:unb64u(key)});
+  const j=sub.toJSON(),id=b64u(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(j.endpoint)));
+  await setDoc(doc(db,'pushSubs',id),{endpoint:j.endpoint,p256dh:j.keys.p256dh,auth:j.keys.auth,updatedAt:serverTimestamp()});
+  try{localStorage.setItem(SYNCED,String(Date.now()))}catch(_){}
+  return true;
+}
+function sheet(html){const b=document.getElementById('mvPushBody');if(!b)return null;b.innerHTML=html;openModal('mvPushModal');return b}
+const bell='<div class="mvLocIcon" aria-hidden="true"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></div>';
+function blockedHelp(){
+  const b=sheet(bell+'<h2>Bildirimler kapalı</h2><p>MolaVolt’un bildirim izni kapalı. Açmak için telefonun <b>Ayarlar → Uygulamalar → MolaVolt → Bildirimler</b> bölümünden izin ver.</p>'+(inApp()?'<button type="button" class="mvBtn primary block" style="width:100%" id="mvPushSettings">Ayarları aç</button>':'<button type="button" class="mvBtn primary block" style="width:100%" onclick="closeModal(\'mvPushModal\')">Tamam</button>'));
+  const st=b&&b.querySelector('#mvPushSettings');if(st)st.onclick=()=>{location.href='intent://settings#Intent;scheme=molavolt;package=com.molavolt.app;end'};
+}
+async function enable(){
+  try{localStorage.setItem(ASKED,'1')}catch(_){}
+  try{closeModal('mvPushModal')}catch(_){}
+  if(!supported()){alert('Bu cihaz veya tarayıcı bildirimleri desteklemiyor.');return false}
+  const perm=await Notification.requestPermission();
+  if(perm!=='granted'){blockedHelp();renderProfile();return false}
+  try{await subscribe()}catch(err){console.warn('MolaVolt bildirim:',err);alert('Bildirim açılamadı: '+(err&&err.message||err))}
+  renderProfile();return true;
+}
+window.mvEnablePush=enable;
+function offer(){
+  if(!supported()||Notification.permission!=='default')return;
+  let asked=false;try{asked=localStorage.getItem(ASKED)==='1'}catch(_){}
+  if(asked)return;
+  if(document.querySelector('.modal.show'))return void setTimeout(offer,8000); // let the location question finish first
+  const b=sheet(bell+'<h2>Fırsatlardan haberdar ol</h2><p>Yakınındaki yeni MolaVolt fırsatları ve uygulama güncellemeleri için bildirim gönderelim. İstediğin zaman Profil’den kapatabilirsin.</p><div class="row" style="display:flex;gap:10px"><button type="button" class="mvBtn ghost" style="flex:1" id="mvPushLater">Şimdi değil</button><button type="button" class="mvBtn primary" style="flex:1" id="mvPushYes">Bildirimleri aç</button></div>');
+  if(!b)return;
+  b.querySelector('#mvPushYes').onclick=enable;
+  b.querySelector('#mvPushLater').onclick=()=>{try{localStorage.setItem(ASKED,'1')}catch(_){}closeModal('mvPushModal')};
+}
+// Profile: status and switch
+function renderProfile(){
+  const prof=document.querySelector('#tab-profile .section');if(!prof)return;
+  let box=document.getElementById('mvPushCard');
+  if(!box){box=document.createElement('div');box.id='mvPushCard';box.className='panel';box.style.marginTop='12px';const acc=document.getElementById('mvAccountCard');prof.insertBefore(box,acc?acc.nextSibling:prof.children[2]||null)}
+  const st=!supported()?'unsupported':Notification.permission;
+  box.innerHTML='<div style="display:flex;align-items:center;gap:12px"><div style="flex:1"><b>Bildirimler</b><p class="muted" style="margin:4px 0 0;font-size:13px">'+(st==='granted'?'Açık: yeni fırsat ve güncellemelerde haber vereceğiz.':st==='denied'?'Kapalı: telefon ayarlarından açabilirsin.':st==='unsupported'?'Bu cihaz bildirimleri desteklemiyor.':'Yeni fırsatlar ve güncellemeler için aç.')+'</p></div>'+(st==='granted'||st==='unsupported'?'':'<button type="button" class="mvBtn primary" id="mvPushToggle">'+(st==='denied'?'Nasıl açılır?':'Aç')+'</button>')+'</div>';
+  const t=box.querySelector('#mvPushToggle');if(t)t.onclick=()=>st==='denied'?blockedHelp():enable();
+}
+// Admin panel: key pair and sending
+async function adminSend(title,body,url,out){
+  const u=window.mvAccount&&window.mvAccount.user;
+  if(!u){out.textContent='Önce yönetici Google hesabıyla giriş yap.';return}
+  out.textContent='Gönderiliyor…';
+  try{
+    const r=await fetch(PUSH_API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({idToken:await u.getIdToken(),title,body,url})});
+    const j=await r.json().catch(()=>({}));
+    out.textContent=j.ok?`Gönderildi: ${j.sent} cihaz${j.removed?` · ${j.removed} eski kayıt silindi`:''}${j.failed?` · ${j.failed} başarısız`:''} (toplam ${j.total} abone)`:'Gönderilemedi: '+(j.error||('HTTP '+r.status));
+  }catch(err){out.textContent='Gönderilemedi: '+(err&&err.message||err)}
+}
+window.mvAdminSendPush=adminSend;
+async function makeKeys(out){
+  if(pub&&!confirm('Yeni anahtar oluşturursan mevcut aboneler, uygulamayı bir sonraki açışlarına kadar bildirim alamaz. Devam edilsin mi?'))return;
+  try{
+    const kp=await crypto.subtle.generateKey({name:'ECDSA',namedCurve:'P-256'},true,['sign','verify']);
+    const jwk=await crypto.subtle.exportKey('jwk',kp.privateKey),raw=await crypto.subtle.exportKey('raw',kp.publicKey);
+    const publicKeyB64=b64u(raw);
+    await setDoc(doc(db,'molavoltPrivate','push'),{privateJwk:JSON.stringify({kty:jwk.kty,crv:jwk.crv,x:jwk.x,y:jwk.y,d:jwk.d}),publicKey:publicKeyB64,updatedAt:serverTimestamp()});
+    await setDoc(doc(db,'molavolt','push'),{publicKey:publicKeyB64,updatedAt:serverTimestamp()});
+    pub=publicKeyB64;await renderAdmin();const done=document.getElementById('mvPushOut');if(done)done.textContent='Bildirim anahtarı oluşturuldu. Artık bildirim gönderebilirsin.';
+    if(Notification.permission==='granted')subscribe().catch(()=>{});
+  }catch(err){out.textContent='Anahtar kaydedilemedi: '+(err&&err.message||err)+' (Firestore kuralları yayınlandı mı, yönetici hesabıyla giriş yaptın mı?)'}
+}
+async function renderAdmin(){
+  const sec=document.getElementById('adminSection-sponsor');if(!sec)return;
+  let box=document.getElementById('mvPushAdmin');
+  if(!box){box=document.createElement('div');box.id='mvPushAdmin';box.className='panel formBox';box.style.marginBottom='14px';sec.insertBefore(box,sec.firstChild)}
+  let key=null;try{pub=null;key=await publicKey()}catch(_){}
+  box.innerHTML=`<h3>Bildirim gönder</h3>
+    <p class="muted" style="font-size:12px;margin:0 0 8px">${key?'Bildirim anahtarı hazır.':'Önce bildirim anahtarını oluştur (bir kez).'} <button type="button" class="secondaryBtn" id="mvPushKey" style="margin-left:6px">${key?'Anahtarı yenile':'Anahtar oluştur'}</button></p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px"><button type="button" class="secondaryBtn" data-preset="offer">Yeni fırsat</button><button type="button" class="secondaryBtn" data-preset="update">Güncelleme</button></div>
+    <label>Başlık</label><input id="mvPushTitle" maxlength="80" placeholder="Yeni fırsat: Krempark Oto Yıkama %10">
+    <label>Mesaj</label><textarea id="mvPushText" maxlength="240" placeholder="Şarj olurken MolaVolt kullanıcılarına özel indirim."></textarea>
+    <label>Tıklanınca açılacak</label><select id="mvPushUrl"><option value="https://molavolt.com/">Uygulama (ana sayfa)</option><option value="${PLAY_URL}">Play Store (güncelleme)</option></select>
+    <button type="button" class="primaryBtn" style="width:100%;margin-top:8px" id="mvPushSend">Tüm abonelere gönder</button>
+    <p class="muted" id="mvPushOut" style="font-size:13px;margin:8px 0 0"></p>`;
+  const out=box.querySelector('#mvPushOut');
+  box.querySelector('#mvPushKey').onclick=()=>makeKeys(out);
+  box.querySelectorAll('[data-preset]').forEach(b=>b.onclick=()=>{
+    const up=b.dataset.preset==='update';
+    box.querySelector('#mvPushTitle').value=up?'MolaVolt güncellendi':'Yeni fırsat';
+    box.querySelector('#mvPushText').value=up?'Yeni sürüm hazır. Güncellemek için dokun.':'Yakınındaki yeni MolaVolt fırsatını gör.';
+    box.querySelector('#mvPushUrl').value=up?PLAY_URL:'https://molavolt.com/';
+  });
+  box.querySelector('#mvPushSend').onclick=()=>{
+    const t=box.querySelector('#mvPushTitle').value.trim(),m=box.querySelector('#mvPushText').value.trim();
+    if(!t){out.textContent='Başlık yaz.';return}
+    if(!confirm('Bu bildirim tüm abonelere gönderilecek. Emin misin?'))return;
+    adminSend(t,m,box.querySelector('#mvPushUrl').value,out);
+  };
+}
+window.mvRenderPushAdmin=renderAdmin;
+// a newly saved offer can go out as a notification
+const baseSave=window.saveSponsor;
+if(typeof baseSave==='function'){window.saveSponsor=function(){
+  const isNew=!((document.getElementById('sp_id')||{}).value);
+  const name=((document.getElementById('sp_name')||{}).value||'').trim(),disc=((document.getElementById('sp_discount')||{}).value||'').trim(),txt=((document.getElementById('sp_offer')||{}).value||'').trim();
+  const r=baseSave.apply(this,arguments);
+  if(isNew&&name&&pub)setTimeout(()=>{
+    if(!confirm('Yeni fırsatı kullanıcılara bildirim olarak gönderelim mi?'))return;
+    renderAdmin().then(()=>{const out=document.getElementById('mvPushOut')||{};adminSend(`Yeni fırsat: ${name}${disc?' '+disc:''}`,txt||'Yakınındaki yeni MolaVolt fırsatını gör.','https://molavolt.com/',out)});
+  },300);
+  return r}}
+const isAdminPage=()=>document.body.classList.contains('admin-mode');
+new MutationObserver(()=>{if(isAdminPage()&&!document.getElementById('mvPushAdmin'))renderAdmin()}).observe(document.body,{attributes:true,attributeFilter:['class']});
+if(isAdminPage())renderAdmin();
+// users: keep an existing subscription fresh (once a day) and ask once, after the first questions
+renderProfile();
+document.addEventListener('mv-account',renderProfile);
+if(supported()&&Notification.permission==='granted'){let last=0;try{last=Number(localStorage.getItem(SYNCED))||0}catch(_){}if(Date.now()-last>86400000)subscribe().catch(err=>console.warn('MolaVolt bildirim:',err))}
+publicKey().then(k=>{if(k&&!isAdminPage())setTimeout(offer,15000)}).catch(()=>{});
+</script>
 </body>
 </html>
