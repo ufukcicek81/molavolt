@@ -4859,8 +4859,9 @@ window.addEventListener('load',()=>{
   const overlap=(a,b)=>{const sm=sampleRoute(a.points,40);return sm.filter(p=>nearRoute(b.points,p,3)).length/sm.length};
   // a detour that goes out to the via point and comes back the same way
   function hasSpur(r){const n=r.points.length,first=r.points.slice(0,Math.floor(n/2)),sm=sampleRoute(r.points.slice(Math.floor(n/2)),20);return sm.filter(p=>nearRoute(first,p,1)).length>3}
-  // drives away from the destination for more than 12 km at some point (e.g. west to a motorway ramp, then back east)
-  function backtracks(r,dest){let best=Infinity;for(const p of sampleRoute(r.points,80)){const d=hKm(p.lat,p.lon,dest.lat,dest.lon);if(d<best)best=d;else if(d-best>12)return true}return false}
+  // drives away from the destination by more than 1 km at some point (e.g. west to a motorway ramp, then back east);
+  // checked about every kilometre of the road
+  function backtracks(r,dest){let best=Infinity;const n=Math.min(r.points.length,Math.max(80,Math.round(r.distanceKm||0)));for(const p of sampleRoute(r.points,n)){const d=hKm(p.lat,p.lon,dest.lat,dest.lon);if(d<best)best=d;else if(d-best>1)return true}return false}
   // an alternative must be a real choice: not much longer or slower, no out-and-back, no backtracking
   const sensible=(r,fastest,dest)=>r.distanceKm<=fastest.distanceKm*1.25&&r.durationMin<=fastest.durationMin*1.45&&!hasSpur(r)&&!backtracks(r,dest);
   async function fetchRoutes(start,dest,bearing,onProgress){
