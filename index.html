@@ -4962,6 +4962,14 @@ window.addEventListener('load',()=>{
       setTimeout(()=>obs.observe(modal,{attributes:true,attributeFilter:['class']}),0);
     });
   }
+  function busyOverlay(on,title,sub){
+    let el=document.getElementById('mvBusy');
+    if(!on){if(el)el.remove();return}
+    if(!el){el=document.createElement('div');el.id='mvBusy';el.setAttribute('role','status');el.setAttribute('aria-live','polite');
+      el.style.cssText='position:fixed;inset:0;z-index:100009;display:grid;place-items:center;background:rgba(6,16,27,.45);backdrop-filter:blur(2px)';
+      document.body.appendChild(el)}
+    el.innerHTML=`<style>@keyframes mvSpin{to{transform:rotate(360deg)}}</style><div style="background:var(--mvSurf,#fff);color:var(--text);border-radius:20px;padding:22px 26px;min-width:230px;text-align:center;box-shadow:0 20px 50px rgba(0,0,0,.3)"><div style="width:42px;height:42px;margin:0 auto 12px;border-radius:50%;border:4px solid rgba(47,240,143,.25);border-top-color:#2ff08f;animation:mvSpin .8s linear infinite"></div><b style="font-size:16px">${esc2(title||'Hesaplanıyor…')}</b>${sub?`<div class="muted" style="font-size:13px;margin-top:4px">${esc2(sub)}</div>`:''}</div>`;
+  }
   function saveChoice(sig,r,count){try{sessionStorage.setItem(ROUTE_CHOICE_KEY,JSON.stringify({sig,index:r.index,count,points:r.points,distanceKm:r.distanceKm,durationMin:r.durationMin,time:Date.now()}))}catch(_){}}
   window.mvChangeRoute=function(){try{sessionStorage.removeItem(ROUTE_CHOICE_KEY)}catch(_){}if(window.planEvRoute)window.planEvRoute()};
   async function baseRoute(dest){
@@ -4974,7 +4982,9 @@ window.addEventListener('load',()=>{
       const routes=cached||await fetchRoutes(start,dest,NaN,msg=>{const o=q('routeResult');if(o)o.innerHTML=`<div class="routeDataLoading"><b>${msg}</b></div>`});
       if(!cached&&routes.length)routeCache[sig]={time:Date.now(),routes};
       if(!routes.length)throw new Error('rota boş');
+      busyOverlay(false);
       const chosen=routes.length>1?await chooseRoute(routes,dest):routes[0];
+      if(chosen){busyOverlay(true,'Rota hesaplanıyor…',`Güzergah ${'ABC'[chosen.index]||''} için şarj durakları seçiliyor`);await new Promise(r=>requestAnimationFrame(()=>setTimeout(r,30)))}
       if(!chosen){const err=new Error('Güzergah seçimi iptal edildi');err.cancelled=true;throw err}
       saveChoice(sig,chosen,routes.length);currentAlt=chosen.index;
       return {ok:true,source:'osrm-preline',points:chosen.points,distanceKm:chosen.distanceKm,alt:chosen.index,altCount:routes.length,time:Date.now()};
@@ -4999,7 +5009,14 @@ window.addEventListener('load',()=>{
   }
   async function preCandidates(dest,reachKm,lowMode){
     const road=await baseRoute(dest); const start={lat:num(userPos?.lat,40.840621),lon:num(userPos?.lon,31.152219)}; const baseKm=road.distanceKm||hKm(start.lat,start.lon,dest.lat,dest.lon)*1.18;
-    const raw=(typeof window.mvRouteStationPool==='function'?window.mvRouteStationPool(stations||[]):(stations||[])).filter(s=>Number.isFinite(Number(s.lat))&&Number.isFinite(Number(s.lon))).map(s=>{const m=projection(road.points,s); const direct=hKm(start.lat,start.lon,Number(s.lat),Number(s.lon)); return {...s,routeDeviation:m.distance,routeProgress:m.progress,alongKm:m.alongKm,routeKw:stKw(s),originDriveKm:direct*1.22};});
+    // Speed: project only stations near the road (0.5° grid around a 1 km version of it) or near the start, onto the
+    // 1 km version; projecting all ~17,000 stations onto every 150 m of a 1,100 km road froze the phone for seconds.
+    let coarse=[];{let last=null;for(const p of road.points){if(!last||hKm(last.lat,last.lon,p.lat,p.lon)>=1){coarse.push(p);last=p}}const tail=road.points[road.points.length-1];if(tail&&coarse[coarse.length-1]!==tail)coarse.push(tail)}
+    if(coarse.length<2)coarse=road.points;
+    const cellOf=(la,lo)=>Math.floor(la/0.5)+':'+Math.floor(lo/0.5),cells=new Set();
+    coarse.forEach(p=>{const a=Math.floor(p.lat/0.5),b=Math.floor(p.lon/0.5);for(let i=-1;i<=1;i++)for(let j=-1;j<=1;j++)cells.add((a+i)+':'+(b+j))});
+    const nearRoad=s=>cells.has(cellOf(Number(s.lat),Number(s.lon)))||hKm(start.lat,start.lon,Number(s.lat),Number(s.lon))<=80;
+    const raw=(typeof window.mvRouteStationPool==='function'?window.mvRouteStationPool(stations||[]):(stations||[])).filter(s=>Number.isFinite(Number(s.lat))&&Number.isFinite(Number(s.lon))&&nearRoad(s)).map(s=>{const m=projection(coarse,s); const direct=hKm(start.lat,start.lon,Number(s.lat),Number(s.lon)); return {...s,routeDeviation:m.distance,routeProgress:m.progress,alongKm:m.alongKm,routeKw:stKw(s),originDriveKm:direct*1.22};});
     let list=[],used=0;
     if(lowMode){
       const emergencyReach=Math.max(5,reachKm*1.75+4);
@@ -5221,9 +5238,11 @@ window.addEventListener('load',()=>{
       syncForce80Target0631();
       toast('Rota hesaplanıyor…');
       if(out)out.innerHTML='<div class="routeDataLoading"><b>Rota hesaplanıyor…</b></div>';
+      busyOverlay(true,'Rota hesaplanıyor…','Yol ve şarj durakları kontrol ediliyor');
+      await new Promise(r=>requestAnimationFrame(()=>setTimeout(r,30)));
       let ready={ok:true,source:'memory',count:(stations||[]).length};
       if(typeof ensureRouteStationsReady0521==='function') ready=await ensureRouteStationsReady0521(); else {if(typeof buildStations==='function')buildStations(); ready={ok:(stations||[]).length>0,source:'memory',count:(stations||[]).length};}
-      if(!ready?.ok||!(stations||[]).length){if(out)out.innerHTML='<div class="routeDataLoading">İstasyon verisi yüklenemedi. Sayfayı yenileyip tekrar deneyin.</div>'; return;}
+      if(!ready?.ok||!(stations||[]).length){busyOverlay(false);if(out)out.innerHTML='<div class="routeDataLoading">İstasyon verisi yüklenemedi. Sayfayı yenileyip tekrar deneyin.</div>'; return;}
       if(typeof updateDataHealth0521==='function')updateDataHealth0521(ready.source||'memory',(stations||[]).length);
       let dest=null; try{dest=typeof resolveRouteDestination==='function'?await resolveRouteDestination():null}catch(_){} if(!dest){try{dest=typeof routeDirectDestination==='function'?routeDirectDestination():routeDestination()}catch(_){dest={name:q('rp_dest')?.value||'Ankara',lat:39.9334,lon:32.8597}}}
       const battery=val('rp_battery',60),soc=val('rp_soc',45),arrival=val('rp_arrival',10),target=val('rp_charge_target',80);
@@ -5250,6 +5269,8 @@ window.addEventListener('load',()=>{
       const effectHtml=`<div class="routeEffectNote"><b>Akıllı tüketim hesabı:</b> ${passengerText} · ${climateText}${elev.enabled?` · ${elev.note}`:''}<br>Ortalama tüketim: <b>${baseConsumption.toFixed(1)}</b> → <b>${consumption.toFixed(1)} kWh/100 km</b>${q('rp_force80')?.checked?' · Her molada en fazla %80 hedeflendi':''}</div>`;
       let actionLabel=plan.stops.length?'Duraklı Google Haritalar rotasını aç':'Google Haritalar’da hedef rotasını aç'; if(lowSocProblem)actionLabel='Hedef rotasını aç';
       if(out){out.innerHTML=`<div class="routeDirectCard ${lowSocProblem||roadUnverified?'warning':'ready'}"><h3>${lowSocProblem?'Güvenli rota bulunamadı':roadUnverified?'Tahmini rota':'Rota hazır'}</h3><p><b>${esc2(dest.name||q('rp_dest')?.value||'Hedef')}</b> için rota hesaplandı.</p><div class="routeMainSummary"><div><span>Durak</span><b>${plan.stops.length}</b></div><div><span>Şarj süresi</span><b>${plan.totalTimeText||Math.ceil(plan.totalMin)+' dk'}</b></div><div><span>Maliyet</span><b>${plan.totalCost.toFixed(0)} TL</b></div></div><p>Mesafe: <b>${distance.toFixed(0)} km</b> · Gerekli enerji: <b>${energyNeed.toFixed(1)} kWh</b> · Başlangıç enerji: <b>${startEnergy.toFixed(1)} kWh</b></p><p>Toplam şarj: <b>${plan.totalKwh.toFixed(1)} kWh</b></p>${effectHtml}${stopHtml}<div class="routeDirectActions"><a href="${url}" target="_blank" rel="noopener">${actionLabel}</a><button onclick="navigator.clipboard&&navigator.clipboard.writeText('${url.replaceAll("'","%27")}');routeToast('Rota linki kopyalandı')">Linki kopyala</button></div><div class="routeVersion" style="display:none">${ROUTE_FIX_VERSION}</div></div>`;}
+      busyOverlay(false);
+      try{out&&out.scrollIntoView({behavior:'smooth',block:'start'})}catch(_){}
       toast(lowSocProblem?'Güvenli rota tamamlanamadı':roadUnverified?'Tahmini rota — kontrol gerekli':'Rota hazır.');
       if(out&&prelim.ok){
         let note='';try{note=sessionStorage.getItem('mvRerouteNote')||'';sessionStorage.removeItem('mvRerouteNote')}catch(_){}
@@ -5261,7 +5282,7 @@ window.addEventListener('load',()=>{
         mvTrip.prepare({points:prelim.points,dest,stops:plan.stops,battery,startEnergy:battery*soc/100,consumption,distance});
         out.querySelectorAll('a[href*="google.com/maps/dir"]').forEach(link=>link.addEventListener('click',()=>mvTrip.start()));
       }
-    }catch(err){if(err&&err.cancelled){if(out)out.innerHTML='';toast('Rota hesaplama iptal edildi');return} console.error(err); if(out)out.innerHTML='<div class="routeWarn">Rota kontrolü şu anda cevap vermedi. Lütfen tekrar dene.</div>'; toast('Rota kontrolü cevap vermedi');}
+    }catch(err){busyOverlay(false);if(err&&err.cancelled){if(out)out.innerHTML='';toast('Rota hesaplama iptal edildi');return} console.error(err); if(out)out.innerHTML='<div class="routeWarn">Rota kontrolü şu anda cevap vermedi. Lütfen tekrar dene.</div>'; toast('Rota kontrolü cevap vermedi');}
   };
   document.addEventListener('DOMContentLoaded',ensureSmartRouteOptions);
   window.addEventListener('load',ensureSmartRouteOptions);
