@@ -1,0 +1,13 @@
+name: Probe OSRM routes (temporary diagnostics)
+on:
+  push:
+    branches: [claude/app-analysis-improvements-9n8r2x]
+    paths: ['.github/probe/routes.py']
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 .github/probe/routes.py
