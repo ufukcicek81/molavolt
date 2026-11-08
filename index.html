@@ -4847,23 +4847,53 @@ window.addEventListener('load',()=>{
   let currentAlt=0;
   const routeSig=(a,b)=>[Number(a.lat).toFixed(2),Number(a.lon).toFixed(2),Number(b.lat).toFixed(3),Number(b.lon).toFixed(3)].join('_'); // start within ~1 km keeps the choice
   function thinPoints(points){const out=[];let last=null;for(const p of points){if(!last||hKm(last.lat,last.lon,p.lat,p.lon)>=0.15){out.push(p);last=p}}const tail=points[points.length-1];if(tail&&out[out.length-1]!==tail)out.push(tail);return out}
-  async function fetchRoutes(start,dest,bearing){
-    const b=Number.isFinite(bearing)&&bearing>=0?`&bearings=${Math.round(bearing)%360},60;`:'';
-    const url=`https://router.project-osrm.org/route/v1/driving/${start.lon},${start.lat};${dest.lon},${dest.lat}?overview=full&geometries=geojson&alternatives=3&steps=false${b}`;
-    const data=await fetchJson(url,{headers:{Accept:'application/json'}},7000);
-    return (data?.routes||[]).map((r,i)=>({index:i,points:thinPoints((r.geometry?.coordinates||[]).map(c=>({lat:Number(c[1]),lon:Number(c[0])})).filter(p=>Number.isFinite(p.lat)&&Number.isFinite(p.lon))),distanceKm:(Number(r.distance)||0)/1000,durationMin:(Number(r.duration)||0)/60})).filter(r=>r.points.length>3);
+  async function osrmRoutes(coords,bearing,alts,ms){
+    const b=Number.isFinite(bearing)&&bearing>=0?`&bearings=${Math.round(bearing)%360},60${';'.repeat(coords.length-1)}`:'';
+    const url=`https://router.project-osrm.org/route/v1/driving/${coords.map(c=>`${c.lon},${c.lat}`).join(';')}?overview=full&geometries=geojson&alternatives=${alts?3:'false'}&steps=false${b}`;
+    const data=await fetchJson(url,{headers:{Accept:'application/json'}},ms||7000);
+    return (data?.routes||[]).map(r=>({points:thinPoints((r.geometry?.coordinates||[]).map(c=>({lat:Number(c[1]),lon:Number(c[0])})).filter(p=>Number.isFinite(p.lat)&&Number.isFinite(p.lon))),distanceKm:(Number(r.distance)||0)/1000,durationMin:(Number(r.duration)||0)/60})).filter(r=>r.points.length>3);
+  }
+  const sampleRoute=(pts,n)=>Array.from({length:n},(_,i)=>pts[Math.floor(i*(pts.length-1)/(n-1))]);
+  function nearRoute(pts,p,km){const lat0=p.lat*Math.PI/180;for(let i=0;i<pts.length;i+=2){const q=pts[i];if(Math.abs(q.lat-p.lat)<0.05&&Math.abs(q.lon-p.lon)<0.07&&hKm(q.lat,q.lon,p.lat,p.lon)<=km)return true}return false}
+  // share of a route that runs on another one (within 3 km)
+  const overlap=(a,b)=>{const sm=sampleRoute(a.points,40);return sm.filter(p=>nearRoute(b.points,p,3)).length/sm.length};
+  // a detour that goes out to the via point and comes back the same way
+  function hasSpur(r){const n=r.points.length,first=r.points.slice(0,Math.floor(n/2)),sm=sampleRoute(r.points.slice(Math.floor(n/2)),20);return sm.filter(p=>nearRoute(first,p,1)).length>3}
+  async function fetchRoutes(start,dest,bearing,onProgress){
+    let routes=await osrmRoutes([start,dest],bearing,true,7000);
+    const fastest=routes[0];
+    // the public OSRM server often returns a single road on long trips: look for other corridors through via points
+    // on both sides of the straight line, keeping roads at most 25% longer that differ from the ones already found
+    const straight=hKm(start.lat,start.lon,dest.lat,dest.lon);
+    if(fastest&&routes.length<3&&straight>120){
+      if(onProgress)onProgress('Alternatif güzergahlar aranıyor…');
+      const mid={lat:(start.lat+dest.lat)/2,lon:(start.lon+dest.lon)/2},kx=Math.cos(mid.lat*Math.PI/180);
+      const dx=(dest.lon-start.lon)*kx,dy=dest.lat-start.lat,len=Math.hypot(dx,dy)||1,nx=-dy/len,ny=dx/len;
+      const offsets=[0.18,-0.18,0.32,-0.32];
+      for(const f of offsets){
+        if(routes.length>=3)break;
+        const deg=f*len;const via={lat:mid.lat+ny*deg,lon:mid.lon+nx*deg/kx};
+        try{
+          const r=(await osrmRoutes([start,via,dest],bearing,false,6000))[0];
+          if(!r||r.distanceKm>fastest.distanceKm*1.25||hasSpur(r))continue;
+          if(routes.some(o=>overlap(r,o)>0.8&&overlap(o,r)>0.8))continue;
+          routes.push(r);
+        }catch(_){}
+      }
+    }
+    return routes.map((r,i)=>({...r,index:i}));
   }
   const trUpper=t=>String(t||'').trim().toLocaleLowerCase('tr-TR').replace(/(^|\s)\S/g,m=>m.toLocaleUpperCase('tr-TR'));
   function viaProvinces(points){
     const list=(stations||[]).filter(s=>Number.isFinite(Number(s.lat))&&Number.isFinite(Number(s.lon))&&/\/\s*[^/]+$/.test(String(s.address||'')));
     if(!list.length)return [];
     const out=[];
-    for(let i=1;i<=24;i++){
-      const p=points[Math.floor(i*(points.length-1)/25)];let best=null,bd=35;
-      for(const s of list){const d=Math.abs(s.lat-p.lat)+Math.abs(s.lon-p.lon);if(d<bd*0.012){const k=hKm(p.lat,p.lon,Number(s.lat),Number(s.lon));if(k<bd){bd=k;best=s}}}
-      if(best){const prov=trUpper(String(best.address).split('/').pop());if(prov&&out[out.length-1]!==prov)out.push(prov)}
+    for(let i=0;i<=40;i++){
+      const p=points[Math.floor(i*(points.length-1)/40)];let best=null,bd=30;
+      for(const s of list){if(Math.abs(s.lat-p.lat)<0.3&&Math.abs(s.lon-p.lon)<0.4){const k=hKm(p.lat,p.lon,Number(s.lat),Number(s.lon));if(k<bd){bd=k;best=s}}}
+      if(best){const prov=trUpper(String(best.address).split('/').pop());if(prov&&!out.includes(prov))out.push(prov)}
     }
-    return out.filter((v,i)=>out.indexOf(v)===i).slice(0,6);
+    return out;
   }
   const fmtDur=m=>{m=Math.round(m);const h=Math.floor(m/60),mm=m%60;return h?`${h} sa ${String(mm).padStart(2,'0')} dk`:`${mm} dk`};
   function routeSketch(routes){
@@ -4882,17 +4912,41 @@ window.addEventListener('load',()=>{
       let modal=document.getElementById('mvRouteChoiceModal');
       if(!modal){modal=document.createElement('div');modal.className='modal';modal.id='mvRouteChoiceModal';modal.innerHTML='<div class="sheet"><div id="mvRouteChoiceBody"></div></div>';document.body.appendChild(modal)}
       const shortest=routes.reduce((a,b)=>b.distanceKm<a.distanceKm?b:a);
+      routes.forEach(r=>{r.via=viaProvinces(r.points)});
+      routes.forEach(r=>{const others=new Set(routes.filter(o=>o!==r).flatMap(o=>o.via));r.only=r.via.filter(v=>!others.has(v))});
       const body=modal.querySelector('#mvRouteChoiceBody');
-      body.innerHTML=`<button class="close" type="button" id="mvRouteChoiceClose" aria-label="Kapat">×</button><h2 style="margin:0 0 4px">Güzergah seç</h2><p class="muted" style="margin:0 0 12px">${esc2(dest.name||'Hedef')} için ${routes.length} güzergah bulundu. Şarj molalarını seçtiğin yola göre hesaplayacağız.</p>${routeSketch(routes)}
-        <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">${routes.map(r=>{const via=viaProvinces(r.points);const tags=[r.index===0?'En hızlı':'',r===shortest&&r.index!==0?'En kısa':''].filter(Boolean);
-          return `<button type="button" class="mvRouteOpt" data-i="${r.index}" style="display:flex;gap:12px;align-items:flex-start;text-align:left;padding:12px 14px;border-radius:16px;border:1px solid var(--line);background:var(--mvSurf,transparent);color:var(--text);font:inherit;cursor:pointer"><span style="flex:0 0 14px;height:14px;border-radius:7px;margin-top:4px;background:${ROUTE_COLORS[r.index%3]}"></span><span style="flex:1;min-width:0"><b style="font-size:16px">Güzergah ${'ABC'[r.index]||r.index+1}</b>${tags.map(t=>` <span class="tag g">${t}</span>`).join('')}<br><span style="font-size:14px"><b>${Math.round(r.distanceKm)} km</b> · ${fmtDur(r.durationMin)}</span>${via.length?`<br><small class="muted">${esc2(via.join(' · '))} üzerinden</small>`:''}</span></button>`}).join('')}</div>`;
+      body.innerHTML=`<button class="close" type="button" id="mvRouteChoiceClose" aria-label="Kapat">×</button><h2 style="margin:0 0 4px">Güzergah seç</h2><p class="muted" style="margin:0 0 12px">${esc2(dest.name||'Hedef')} için ${routes.length} güzergah bulundu. Birine dokun, haritada gör; sonra hesapla.</p>
+        <div id="mvRouteMap" style="height:230px;border-radius:14px;overflow:hidden;background:rgba(127,127,127,.08)"></div>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">${routes.map(r=>{const tags=[r.index===0?'En hızlı':'',r===shortest&&r.index!==0?'En kısa':''].filter(Boolean);
+          const extra=r.index&&routes[0]?` <small class="muted">(+${Math.max(0,Math.round(r.distanceKm-routes[0].distanceKm))} km, +${fmtDur(Math.max(0,r.durationMin-routes[0].durationMin))})</small>`:'';
+          return `<button type="button" class="mvRouteOpt" data-i="${r.index}" style="display:flex;gap:12px;align-items:flex-start;text-align:left;padding:12px 14px;border-radius:16px;border:2px solid var(--line);background:var(--mvSurf,transparent);color:var(--text);font:inherit;cursor:pointer"><span style="flex:0 0 14px;height:14px;border-radius:7px;margin-top:4px;background:${ROUTE_COLORS[r.index%3]}"></span><span style="flex:1;min-width:0"><b style="font-size:16px">Güzergah ${'ABC'[r.index]||r.index+1}</b>${tags.map(t=>` <span class="tag g">${t}</span>`).join('')}<br><span style="font-size:14px"><b>${Math.round(r.distanceKm)} km</b> · ${fmtDur(r.durationMin)}</span>${extra}${r.only.length?`<br><span style="font-size:13px"><b>Farkı:</b> ${esc2(r.only.join(', '))} üzerinden</span>`:''}${r.via.length?`<br><small class="muted">${esc2(r.via.join(' · '))}</small>`:''}</span></button>`}).join('')}</div>
+        <button type="button" class="mvBtn primary" id="mvRouteGo" style="width:100%;margin-top:12px">Güzergah A ile hesapla</button>`;
+      let sel=0,lines=[],gmap=null;
+      const paint=()=>{
+        body.querySelectorAll('.mvRouteOpt').forEach(b=>{const on=Number(b.dataset.i)===sel;b.style.borderColor=on?ROUTE_COLORS[sel%3]:'';b.setAttribute('aria-pressed',on)});
+        const go=body.querySelector('#mvRouteGo');if(go)go.textContent=`Güzergah ${'ABC'[sel]||sel+1} ile hesapla`;
+        lines.forEach(l=>l.line.setOptions({strokeOpacity:l.i===sel?1:.45,strokeWeight:l.i===sel?6:4,zIndex:l.i===sel?10:1}));
+        if(!gmap){const box=body.querySelector('#mvRouteMap');if(box)box.innerHTML=routeSketch(routes.slice().sort((a,b)=>(a.index===sel)-(b.index===sel)))}
+      };
+      try{
+        const box=body.querySelector('#mvRouteMap');
+        if(window.google&&google.maps&&google.maps.Map&&google.maps.Polyline&&box){
+          gmap=new google.maps.Map(box,{mapTypeControl:false,streetViewControl:false,fullscreenControl:false,cameraControl:false,clickableIcons:false,gestureHandling:'greedy'});
+          const bounds=new google.maps.LatLngBounds();
+          routes.forEach(r=>{const path=r.points.filter((_,k)=>k%3===0||k===r.points.length-1).map(p=>({lat:p.lat,lng:p.lon}));path.forEach(pt=>bounds.extend(pt));
+            const line=new google.maps.Polyline({path,map:gmap,strokeColor:ROUTE_COLORS[r.index%3],strokeOpacity:.45,strokeWeight:4,clickable:true});
+            line.addListener('click',()=>{sel=r.index;paint()});lines.push({i:r.index,line})});
+          gmap.fitBounds(bounds,24);
+        }
+      }catch(_){gmap=null}
       let settled=false;
       const done=i=>{if(settled)return;settled=true;obs.disconnect();closeModal('mvRouteChoiceModal');resolve(routes.find(r=>r.index===i)||routes[0])};
-      body.querySelectorAll('.mvRouteOpt').forEach(b=>b.onclick=()=>done(Number(b.dataset.i)));
+      body.querySelectorAll('.mvRouteOpt').forEach(b=>b.onclick=()=>{sel=Number(b.dataset.i);paint()});
+      body.querySelector('#mvRouteGo').onclick=()=>done(sel);
       body.querySelector('#mvRouteChoiceClose').onclick=()=>done(0);
       // closed any other way (backdrop, back button): continue with the fastest road
       const obs=new MutationObserver(()=>{if(!modal.classList.contains('show'))done(0)});
-      openModal('mvRouteChoiceModal');
+      openModal('mvRouteChoiceModal');paint();
       setTimeout(()=>obs.observe(modal,{attributes:true,attributeFilter:['class']}),0);
     });
   }
@@ -4903,7 +4957,7 @@ window.addEventListener('load',()=>{
     const sig=routeSig(start,dest);
     try{const c=JSON.parse(sessionStorage.getItem(ROUTE_CHOICE_KEY)||'null');if(c&&c.sig===sig&&Array.isArray(c.points)&&c.points.length>3&&Date.now()-c.time<12*3600e3){currentAlt=c.index||0;return {ok:true,source:'osrm-chosen',points:c.points,distanceKm:c.distanceKm,alt:c.index||0,altCount:c.count||1,time:c.time}}}catch(_){}
     try{
-      const routes=await fetchRoutes(start,dest);
+      const routes=await fetchRoutes(start,dest,NaN,msg=>{const o=q('routeResult');if(o)o.innerHTML=`<div class="routeDataLoading"><b>${msg}</b></div>`});
       if(!routes.length)throw new Error('rota boş');
       const chosen=routes.length>1?await chooseRoute(routes,dest):routes[0];
       saveChoice(sig,chosen,routes.length);currentAlt=chosen.index;
@@ -5109,7 +5163,7 @@ window.addEventListener('load',()=>{
       try{
         const soc=Math.round(energyNow()/t.battery*100);
         userPos={lat:pos.lat,lon:pos.lon,accuracy:pos.acc||0};try{savePos(userPos)}catch(_){}
-        const routes=await fetchRoutes(pos,t.dest,heading);
+        const routes=(await osrmRoutes([pos,t.dest],heading,false,7000)).map((r,i)=>({...r,index:i})); // just the road ahead
         if(!routes.length)throw new Error('rota yok');
         saveChoice(routeSig(pos,t.dest),routes[0],1);
         const socEl=q('rp_soc');if(socEl){socEl.value=String(soc);socEl.dispatchEvent(new Event('input',{bubbles:true}))}
