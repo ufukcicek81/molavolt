@@ -4839,18 +4839,85 @@ window.addEventListener('load',()=>{
     adv.appendChild(box);
   }
 
+  /* MV_ROUTE_CHOICE_1108: the driver picks the road. OSRM returns up to three alternatives; they are shown on a small
+     sketch with distance, time and the provinces they pass, and the choice is kept per start/destination. While the
+     trip is being followed (after "Yola çık"), leaving the chosen road re-plans from the current position. */
+  const ROUTE_CHOICE_KEY='mv_route_choice_1108';
+  const ROUTE_COLORS=['#2ff08f','#22a7f0','#f5a623'];
+  let currentAlt=0;
+  const routeSig=(a,b)=>[Number(a.lat).toFixed(2),Number(a.lon).toFixed(2),Number(b.lat).toFixed(3),Number(b.lon).toFixed(3)].join('_'); // start within ~1 km keeps the choice
+  function thinPoints(points){const out=[];let last=null;for(const p of points){if(!last||hKm(last.lat,last.lon,p.lat,p.lon)>=0.15){out.push(p);last=p}}const tail=points[points.length-1];if(tail&&out[out.length-1]!==tail)out.push(tail);return out}
+  async function fetchRoutes(start,dest,bearing){
+    const b=Number.isFinite(bearing)&&bearing>=0?`&bearings=${Math.round(bearing)%360},60;`:'';
+    const url=`https://router.project-osrm.org/route/v1/driving/${start.lon},${start.lat};${dest.lon},${dest.lat}?overview=full&geometries=geojson&alternatives=3&steps=false${b}`;
+    const data=await fetchJson(url,{headers:{Accept:'application/json'}},7000);
+    return (data?.routes||[]).map((r,i)=>({index:i,points:thinPoints((r.geometry?.coordinates||[]).map(c=>({lat:Number(c[1]),lon:Number(c[0])})).filter(p=>Number.isFinite(p.lat)&&Number.isFinite(p.lon))),distanceKm:(Number(r.distance)||0)/1000,durationMin:(Number(r.duration)||0)/60})).filter(r=>r.points.length>3);
+  }
+  const trUpper=t=>String(t||'').trim().toLocaleLowerCase('tr-TR').replace(/(^|\s)\S/g,m=>m.toLocaleUpperCase('tr-TR'));
+  function viaProvinces(points){
+    const list=(stations||[]).filter(s=>Number.isFinite(Number(s.lat))&&Number.isFinite(Number(s.lon))&&/\/\s*[^/]+$/.test(String(s.address||'')));
+    if(!list.length)return [];
+    const out=[];
+    for(let i=1;i<=24;i++){
+      const p=points[Math.floor(i*(points.length-1)/25)];let best=null,bd=35;
+      for(const s of list){const d=Math.abs(s.lat-p.lat)+Math.abs(s.lon-p.lon);if(d<bd*0.012){const k=hKm(p.lat,p.lon,Number(s.lat),Number(s.lon));if(k<bd){bd=k;best=s}}}
+      if(best){const prov=trUpper(String(best.address).split('/').pop());if(prov&&out[out.length-1]!==prov)out.push(prov)}
+    }
+    return out.filter((v,i)=>out.indexOf(v)===i).slice(0,6);
+  }
+  const fmtDur=m=>{m=Math.round(m);const h=Math.floor(m/60),mm=m%60;return h?`${h} sa ${String(mm).padStart(2,'0')} dk`:`${mm} dk`};
+  function routeSketch(routes){
+    const all=routes.flatMap(r=>r.points);let minLat=Infinity,maxLat=-Infinity,minLon=Infinity,maxLon=-Infinity;
+    all.forEach(p=>{minLat=Math.min(minLat,p.lat);maxLat=Math.max(maxLat,p.lat);minLon=Math.min(minLon,p.lon);maxLon=Math.max(maxLon,p.lon)});
+    const W=320,H=180,pad=12,kx=Math.cos((minLat+maxLat)/2*Math.PI/180);
+    const sx=(maxLon-minLon)*kx||1e-6,sy=(maxLat-minLat)||1e-6,sc=Math.min((W-2*pad)/sx,(H-2*pad)/sy);
+    const ox=(W-sx*sc)/2,oy=(H-sy*sc)/2;
+    const xy=p=>[(ox+(p.lon-minLon)*kx*sc).toFixed(1),(H-oy-(p.lat-minLat)*sc).toFixed(1)];
+    const path=r=>{const step=Math.max(1,Math.floor(r.points.length/220));return r.points.filter((_,i)=>i%step===0||i===r.points.length-1).map((p,i)=>(i?'L':'M')+xy(p).join(',')).join('')};
+    const a=xy(routes[0].points[0]),z=xy(routes[0].points[routes[0].points.length-1]);
+    return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Güzergah çizimi" style="display:block;background:rgba(127,127,127,.08);border-radius:14px">${routes.slice().reverse().map(r=>`<path d="${path(r)}" fill="none" stroke="${ROUTE_COLORS[r.index%3]}" stroke-width="${r.index?3:4.5}" stroke-linecap="round" stroke-linejoin="round" opacity="${r.index?.85:1}"/>`).join('')}<circle cx="${a[0]}" cy="${a[1]}" r="5" fill="#fff" stroke="#111" stroke-width="2"/><circle cx="${z[0]}" cy="${z[1]}" r="6" fill="#e5484d" stroke="#fff" stroke-width="2"/></svg>`;
+  }
+  function chooseRoute(routes,dest){
+    return new Promise(resolve=>{
+      let modal=document.getElementById('mvRouteChoiceModal');
+      if(!modal){modal=document.createElement('div');modal.className='modal';modal.id='mvRouteChoiceModal';modal.innerHTML='<div class="sheet"><div id="mvRouteChoiceBody"></div></div>';document.body.appendChild(modal)}
+      const shortest=routes.reduce((a,b)=>b.distanceKm<a.distanceKm?b:a);
+      const body=modal.querySelector('#mvRouteChoiceBody');
+      body.innerHTML=`<button class="close" type="button" id="mvRouteChoiceClose" aria-label="Kapat">×</button><h2 style="margin:0 0 4px">Güzergah seç</h2><p class="muted" style="margin:0 0 12px">${esc2(dest.name||'Hedef')} için ${routes.length} güzergah bulundu. Şarj molalarını seçtiğin yola göre hesaplayacağız.</p>${routeSketch(routes)}
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">${routes.map(r=>{const via=viaProvinces(r.points);const tags=[r.index===0?'En hızlı':'',r===shortest&&r.index!==0?'En kısa':''].filter(Boolean);
+          return `<button type="button" class="mvRouteOpt" data-i="${r.index}" style="display:flex;gap:12px;align-items:flex-start;text-align:left;padding:12px 14px;border-radius:16px;border:1px solid var(--line);background:var(--mvSurf,transparent);color:var(--text);font:inherit;cursor:pointer"><span style="flex:0 0 14px;height:14px;border-radius:7px;margin-top:4px;background:${ROUTE_COLORS[r.index%3]}"></span><span style="flex:1;min-width:0"><b style="font-size:16px">Güzergah ${'ABC'[r.index]||r.index+1}</b>${tags.map(t=>` <span class="tag g">${t}</span>`).join('')}<br><span style="font-size:14px"><b>${Math.round(r.distanceKm)} km</b> · ${fmtDur(r.durationMin)}</span>${via.length?`<br><small class="muted">${esc2(via.join(' · '))} üzerinden</small>`:''}</span></button>`}).join('')}</div>`;
+      let settled=false;
+      const done=i=>{if(settled)return;settled=true;obs.disconnect();closeModal('mvRouteChoiceModal');resolve(routes.find(r=>r.index===i)||routes[0])};
+      body.querySelectorAll('.mvRouteOpt').forEach(b=>b.onclick=()=>done(Number(b.dataset.i)));
+      body.querySelector('#mvRouteChoiceClose').onclick=()=>done(0);
+      // closed any other way (backdrop, back button): continue with the fastest road
+      const obs=new MutationObserver(()=>{if(!modal.classList.contains('show'))done(0)});
+      openModal('mvRouteChoiceModal');
+      setTimeout(()=>obs.observe(modal,{attributes:true,attributeFilter:['class']}),0);
+    });
+  }
+  function saveChoice(sig,r,count){try{sessionStorage.setItem(ROUTE_CHOICE_KEY,JSON.stringify({sig,index:r.index,count,points:r.points,distanceKm:r.distanceKm,durationMin:r.durationMin,time:Date.now()}))}catch(_){}}
+  window.mvChangeRoute=function(){try{sessionStorage.removeItem(ROUTE_CHOICE_KEY)}catch(_){}if(window.planEvRoute)window.planEvRoute()};
   async function baseRoute(dest){
     const start={lat:num(userPos?.lat,40.840621),lon:num(userPos?.lon,31.152219)};
-    const key='mv_0627_base_'+[start.lat,start.lon,dest.lat,dest.lon].map(x=>Number(x).toFixed(4)).join('_');
-    try{const c=JSON.parse(sessionStorage.getItem(key)||'null'); if(c&&Date.now()-c.time<15*60*1000&&Array.isArray(c.points)&&c.points.length>3)return c;}catch(_){}
+    const sig=routeSig(start,dest);
+    try{const c=JSON.parse(sessionStorage.getItem(ROUTE_CHOICE_KEY)||'null');if(c&&c.sig===sig&&Array.isArray(c.points)&&c.points.length>3&&Date.now()-c.time<12*3600e3){currentAlt=c.index||0;return {ok:true,source:'osrm-chosen',points:c.points,distanceKm:c.distanceKm,alt:c.index||0,altCount:c.count||1,time:c.time}}}catch(_){}
     try{
-      const url=`https://router.project-osrm.org/route/v1/driving/${start.lon},${start.lat};${dest.lon},${dest.lat}?overview=full&geometries=geojson&alternatives=false&steps=false`;
-      const data=await fetchJson(url,{headers:{Accept:'application/json'}},2500); const r=data?.routes?.[0]; const coords=r?.geometry?.coordinates||[];
-      const points=coords.map(c=>({lat:Number(c[1]),lon:Number(c[0])})).filter(p=>Number.isFinite(p.lat)&&Number.isFinite(p.lon));
-      if(points.length<3)throw new Error('rota boş');
-      const pack={ok:true,source:'osrm-preline',points,distanceKm:(Number(r.distance)||0)/1000,time:Date.now()};
-      try{sessionStorage.setItem(key,JSON.stringify(pack))}catch(_){} return pack;
-    }catch(e){return {ok:false,source:'line-preline',points:[start,{lat:num(dest.lat,39.9334),lon:num(dest.lon,32.8597)}],distanceKm:hKm(start.lat,start.lon,dest.lat,dest.lon)*1.18,time:Date.now()}}
+      const routes=await fetchRoutes(start,dest);
+      if(!routes.length)throw new Error('rota boş');
+      const chosen=routes.length>1?await chooseRoute(routes,dest):routes[0];
+      saveChoice(sig,chosen,routes.length);currentAlt=chosen.index;
+      return {ok:true,source:'osrm-preline',points:chosen.points,distanceKm:chosen.distanceKm,alt:chosen.index,altCount:routes.length,time:Date.now()};
+    }catch(e){currentAlt=0;return {ok:false,source:'line-preline',points:[start,{lat:num(dest.lat,39.9334),lon:num(dest.lon,32.8597)}],distanceKm:hKm(start.lat,start.lon,dest.lat,dest.lon)*1.18,time:Date.now()}}
+  }
+  // Google Maps picks its own road between waypoints; on a non-default road add two shaping points along it.
+  function shapedStops(road,stops){
+    if(!road||!road.alt||!Array.isArray(road.points)||road.points.length<4)return stops;
+    const pts=road.points;let cum=[0];for(let i=1;i<pts.length;i++)cum.push(cum[i-1]+hKm(pts[i-1].lat,pts[i-1].lon,pts[i].lat,pts[i].lon));
+    const total=cum[cum.length-1]||1;
+    const at=f=>{const t=f*total;let i=cum.findIndex(c=>c>=t);if(i<0)i=pts.length-1;return {lat:pts[i].lat,lon:pts[i].lon,routeProgress:f,shape:true}};
+    const extra=[0.33,0.66].filter(f=>!(stops||[]).some(s=>Math.abs((s.routeProgress||0)-f)<0.1)).map(at);
+    return [...(stops||[]),...extra].sort((a,b)=>(a.routeProgress||0)-(b.routeProgress||0)).slice(0,8);
   }
   function projection(points,p){
     if(!Array.isArray(points)||points.length<2)return{distance:999,progress:0,alongKm:0};
@@ -4890,6 +4957,7 @@ window.addEventListener('load',()=>{
     return {list,usedCorridor:used,baseKm,source:road.source,points:road.points};
   }
   async function checkByVercelApi(dest,cands,opts){
+    if(currentAlt>0)return {accepted:[]}; // it checks detours against the fastest road only
     const origin={lat:num(userPos?.lat,40.840621),lon:num(userPos?.lon,31.152219)};
     const payload={origin,destination:{lat:num(dest.lat,39.9334),lon:num(dest.lon,32.8597)},emergencyMode:!!opts?.emergencyMode,minProgress:opts?.emergencyMode?0:0.006,maxRouteDeviationKm:opts?.emergencyMode?30:7,maxExtraKm:opts?.emergencyMode?18:undefined,candidates:cands.slice(0,8).map(s=>({id:s.id,name:s.name,address:s.address,brand:s.brand,power:s.power,lat:s.lat,lon:s.lon,routeDeviation:s.routeDeviation,routeProgress:s.routeProgress,alongKm:s.alongKm,routeKw:s.routeKw,originDriveKm:s.originDriveKm})),maxCandidates:8};
     return await fetchJson(ROUTE_API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)},2500);
@@ -5024,6 +5092,58 @@ window.addEventListener('load',()=>{
   }
   document.addEventListener('change',function(e){if(e.target&&e.target.id==='rp_force80')syncForce80Target0631();});
 
+  // Trip following: while MolaVolt is open (or when it comes back to the front) the position is compared with the
+  // chosen road; after two fixes more than 1.5 km off it, the trip is re-planned from here with the current heading.
+  const mvTrip=(function(){
+    let t=null,watchId=null,off=0,busy=false;
+    const info=txt=>{const el=document.getElementById('mvTrackInfo');if(el)el.textContent=txt};
+    const btn=()=>{const b=document.getElementById('mvTrackBtn');if(!b)return;b.textContent=t&&t.active?'Takibi durdur':'Güzergah takibini başlat';b.onclick=()=>t&&t.active?stop(true):start()};
+    function energyNow(){ // planned energy at the last point reached on the chosen road (planned charges assumed done)
+      const along=t.lastAlong||0;let e=t.startEnergy-along*t.consumption/100;
+      for(const s of t.stops||[]){const sAlong=(s.routeProgress||0)*t.distance;if(sAlong<=along)e=(s.chargeToSoc||0)/100*t.battery-(along-sAlong)*t.consumption/100}
+      e-=(t.offKm||0)*t.consumption/100;
+      return Math.max(t.battery*0.03,Math.min(t.battery,e));
+    }
+    async function reroute(pos,heading){
+      busy=true;info('Güzergahtan çıktın; molalar yeni yola göre hesaplanıyor…');
+      try{
+        const soc=Math.round(energyNow()/t.battery*100);
+        userPos={lat:pos.lat,lon:pos.lon,accuracy:pos.acc||0};try{savePos(userPos)}catch(_){}
+        const routes=await fetchRoutes(pos,t.dest,heading);
+        if(!routes.length)throw new Error('rota yok');
+        saveChoice(routeSig(pos,t.dest),routes[0],1);
+        const socEl=q('rp_soc');if(socEl){socEl.value=String(soc);socEl.dispatchEvent(new Event('input',{bubbles:true}))}
+        try{sessionStorage.setItem('mvRerouteNote',`Bulunduğun yerden hedefe yeni yolla molalar yeniden hesaplandı. Tahmini şarjın %${soc}; farklıysa yukarıdan düzelt.`)}catch(_){}
+        try{buildStations()}catch(_){}
+        if(window.planEvRoute)await window.planEvRoute();
+        if(t){t.active=true}start(true);
+        try{if(typeof routeToast==='function')routeToast('Güzergah değişti, molalar güncellendi')}catch(_){}
+      }catch(e){info('Yeni güzergah alınamadı; bağlantı gelince tekrar denenecek.')}
+      busy=false;
+    }
+    function onPos(p){
+      if(!t||!t.active||busy)return;
+      const pos={lat:p.coords.latitude,lon:p.coords.longitude,acc:p.coords.accuracy};
+      if(hKm(pos.lat,pos.lon,Number(t.dest.lat),Number(t.dest.lon))<1.5){info('Hedefe vardın. Takip kapatıldı.');stop(false);return}
+      const m=projection(t.points,pos);
+      if(m.distance<=1.5){off=0;t.lastAlong=m.alongKm;t.lastOn=pos;t.offKm=0;info('Güzergah takibi açık · seçtiğin yoldasın.');return}
+      if((pos.acc||0)>200)return;
+      off++;t.offKm=t.lastOn?hKm(t.lastOn.lat,t.lastOn.lon,pos.lat,pos.lon):0;
+      if(off<2||Date.now()-(t.lastReroute||0)<90000)return;
+      t.lastReroute=Date.now();off=0;
+      reroute(pos,Number.isFinite(p.coords.heading)&&p.coords.speed>2?p.coords.heading:NaN);
+    }
+    function watch(){if(watchId==null&&navigator.geolocation)watchId=navigator.geolocation.watchPosition(onPos,()=>{},{enableHighAccuracy:true,maximumAge:15000,timeout:30000})}
+    function unwatch(){if(watchId!=null&&navigator.geolocation)navigator.geolocation.clearWatch(watchId);watchId=null}
+    function prepare(d){const keep=t&&t.active;t={...d,active:keep,lastAlong:0,lastOn:null,offKm:0,lastReroute:t?t.lastReroute:0};off=0;btn();if(keep){watch();info('Güzergah takibi açık.')}else info('“Yola çık” dediğinde ya da takibi başlattığında, yoldan saparsan molaları yeni yola göre yeniden hesaplarız.')}
+    function start(quiet){if(!t)return;t.active=true;try{sessionStorage.setItem('mvTripOn','1')}catch(_){}watch();btn();if(!quiet)info('Güzergah takibi açık. MolaVolt açıkken ya da uygulamaya döndüğünde konumun kontrol edilir.')}
+    function stop(manual){if(t)t.active=false;unwatch();btn();try{sessionStorage.removeItem('mvTripOn')}catch(_){}if(manual)info('Takip kapalı.')}
+    // the driver navigates in Google Maps; when MolaVolt comes back to the front, check the position once
+    document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&t&&t.active&&navigator.geolocation){navigator.geolocation.getCurrentPosition(p=>{off=Math.max(off,1);onPos(p)},()=>{},{enableHighAccuracy:true,maximumAge:20000,timeout:15000})}});
+    window.mvTrip={get state(){return t},start,stop};
+    return {prepare,start,stop};
+  })();
+
   window.planEvRoute=async function(){
     const out=q('routeResult');
     try{
@@ -5048,7 +5168,7 @@ window.addEventListener('load',()=>{
       const factors=routeFactors(distance,baseConsumption,elev);
       const consumption=factors.adjustedConsumption;
       const pack=await packPromise; const plan=await buildPlan(pack.list,dest,distance,battery,soc,arrival,target,consumption,price,chargeKw,{force80:!!q('rp_force80')?.checked});
-      const energyNeed=distance*consumption/100; const lowSocProblem=!plan.ok; const roadUnverified=!prelim.ok; const url=mapsUrl(dest,plan.stops);
+      const energyNeed=distance*consumption/100; const lowSocProblem=!plan.ok; const roadUnverified=!prelim.ok; const url=mapsUrl(dest,shapedStops(prelim,plan.stops));
       let stopHtml='';
       if(plan.stops.length){stopHtml='<div class="routeStopPreview"><b>Önerilen şarj durakları</b>'+plan.stops.map((s,i)=>`<div class="routeStopPreviewItem"><b>${i+1}. ${esc2(s.name)}</b><br>${esc2(s.address||'')}<br>Yola sapma: <b>${num(s.routeDeviation,0).toFixed(1)} km</b><br>Şarj: <b>${s.chargeKwh.toFixed(1)} kWh</b> · Süre: <b>${s.chargeTimeText||((s.chargeMinLow&&s.chargeMinHigh)?(s.chargeMinLow+'-'+s.chargeMinHigh+' dk'):(s.chargeMin+' dk'))}</b> · Maliyet: <b>${s.cost.toFixed(0)} TL</b>${q('rp_force80')?.checked?`<br>Bu moladan çıkış: <b>%${Math.min(80,Math.round(s.chargeToSoc||80))}</b>`:''}</div>`).join('')+'</div>';}
       else if(lowSocProblem){stopHtml='<p class="strongWarn">Bu şarjla gidiş yönünde güvenli şarj durağı bulunamadı. Lütfen en yakın güvenli noktaya yönlenmeden önce şarj durumunu kontrol et.</p>';}
@@ -5061,6 +5181,16 @@ window.addEventListener('load',()=>{
       let actionLabel=plan.stops.length?'Duraklı Google Haritalar rotasını aç':'Google Haritalar’da hedef rotasını aç'; if(lowSocProblem)actionLabel='Hedef rotasını aç';
       if(out){out.innerHTML=`<div class="routeDirectCard ${lowSocProblem||roadUnverified?'warning':'ready'}"><h3>${lowSocProblem?'Güvenli rota bulunamadı':roadUnverified?'Tahmini rota':'Rota hazır'}</h3><p><b>${esc2(dest.name||q('rp_dest')?.value||'Hedef')}</b> için rota hesaplandı.</p><div class="routeMainSummary"><div><span>Durak</span><b>${plan.stops.length}</b></div><div><span>Şarj süresi</span><b>${plan.totalTimeText||Math.ceil(plan.totalMin)+' dk'}</b></div><div><span>Maliyet</span><b>${plan.totalCost.toFixed(0)} TL</b></div></div><p>Mesafe: <b>${distance.toFixed(0)} km</b> · Gerekli enerji: <b>${energyNeed.toFixed(1)} kWh</b> · Başlangıç enerji: <b>${startEnergy.toFixed(1)} kWh</b></p><p>Toplam şarj: <b>${plan.totalKwh.toFixed(1)} kWh</b></p>${effectHtml}${stopHtml}<div class="routeDirectActions"><a href="${url}" target="_blank" rel="noopener">${actionLabel}</a><button onclick="navigator.clipboard&&navigator.clipboard.writeText('${url.replaceAll("'","%27")}');routeToast('Rota linki kopyalandı')">Linki kopyala</button></div><div class="routeVersion" style="display:none">${ROUTE_FIX_VERSION}</div></div>`;}
       toast(lowSocProblem?'Güvenli rota tamamlanamadı':roadUnverified?'Tahmini rota — kontrol gerekli':'Rota hazır.');
+      if(out&&prelim.ok){
+        let note='';try{note=sessionStorage.getItem('mvRerouteNote')||'';sessionStorage.removeItem('mvRerouteNote')}catch(_){}
+        const card=out.querySelector('.routeDirectCard')||out;
+        const tools=document.createElement('div');tools.className='mvRouteTools';
+        tools.innerHTML=(note?`<div class="routeEffectNote" style="border-color:#22a7f0"><b>↻ Güzergah değişti.</b> ${esc2(note)}</div>`:'')
+          +`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">${prelim.altCount>1?`<button type="button" class="secondaryBtn" onclick="mvChangeRoute()">Güzergahı değiştir (${prelim.altCount} seçenek)</button>`:''}<button type="button" class="secondaryBtn" id="mvTrackBtn"></button></div><p class="muted" id="mvTrackInfo" style="font-size:12px;margin:6px 0 0"></p>`;
+        card.appendChild(tools);
+        mvTrip.prepare({points:prelim.points,dest,stops:plan.stops,battery,startEnergy:battery*soc/100,consumption,distance});
+        out.querySelectorAll('a[href*="google.com/maps/dir"]').forEach(link=>link.addEventListener('click',()=>mvTrip.start()));
+      }
     }catch(err){console.error(err); if(out)out.innerHTML='<div class="routeWarn">Rota kontrolü şu anda cevap vermedi. Lütfen tekrar dene.</div>'; toast('Rota kontrolü cevap vermedi');}
   };
   document.addEventListener('DOMContentLoaded',ensureSmartRouteOptions);
