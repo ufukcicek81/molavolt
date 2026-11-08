@@ -4845,6 +4845,7 @@ window.addEventListener('load',()=>{
   const ROUTE_CHOICE_KEY='mv_route_choice_1108';
   const ROUTE_COLORS=['#2ff08f','#22a7f0','#f5a623'];
   let currentAlt=0;
+  const routeCache={};
   const routeSig=(a,b)=>[Number(a.lat).toFixed(2),Number(a.lon).toFixed(2),Number(b.lat).toFixed(3),Number(b.lon).toFixed(3)].join('_'); // start within ~1 km keeps the choice
   function thinPoints(points){const out=[];let last=null;for(const p of points){if(!last||hKm(last.lat,last.lon,p.lat,p.lon)>=0.15){out.push(p);last=p}}const tail=points[points.length-1];if(tail&&out[out.length-1]!==tail)out.push(tail);return out}
   async function osrmRoutes(coords,bearing,alts,ms){
@@ -4934,25 +4935,28 @@ window.addEventListener('load',()=>{
         lines.forEach(l=>l.line.setOptions({strokeOpacity:l.i===sel?1:.45,strokeWeight:l.i===sel?6:4,zIndex:l.i===sel?10:1}));
         if(!gmap){const box=body.querySelector('#mvRouteMap');if(box)box.innerHTML=routeSketch(routes.slice().sort((a,b)=>(a.index===sel)-(b.index===sel)))}
       };
-      try{
+      // the map is drawn once the sheet is on screen, otherwise it fits the roads into a zero-size box
+      const drawMap=()=>{try{
         const box=body.querySelector('#mvRouteMap');
         if(window.google&&google.maps&&google.maps.Map&&google.maps.Polyline&&box){
+          box.innerHTML='';
           gmap=new google.maps.Map(box,{mapTypeControl:false,streetViewControl:false,fullscreenControl:false,cameraControl:false,clickableIcons:false,gestureHandling:'greedy'});
           const bounds=new google.maps.LatLngBounds();
           routes.forEach(r=>{const path=r.points.filter((_,k)=>k%3===0||k===r.points.length-1).map(p=>({lat:p.lat,lng:p.lon}));path.forEach(pt=>bounds.extend(pt));
             const line=new google.maps.Polyline({path,map:gmap,strokeColor:ROUTE_COLORS[r.index%3],strokeOpacity:.45,strokeWeight:4,clickable:true});
             line.addListener('click',()=>{sel=r.index;paint()});lines.push({i:r.index,line})});
           gmap.fitBounds(bounds,24);
+          google.maps.event.addListenerOnce(gmap,'idle',()=>gmap.fitBounds(bounds,24));
         }
-      }catch(_){gmap=null}
+      }catch(_){gmap=null}paint()};
       let settled=false;
-      const done=i=>{if(settled)return;settled=true;obs.disconnect();closeModal('mvRouteChoiceModal');resolve(routes.find(r=>r.index===i)||routes[0])};
+      // i: chosen road; null: cancelled (X, back button) and nothing is planned
+      const done=i=>{if(settled)return;settled=true;obs.disconnect();closeModal('mvRouteChoiceModal');resolve(i===null?null:(routes.find(r=>r.index===i)||routes[0]))};
       body.querySelectorAll('.mvRouteOpt').forEach(b=>b.onclick=()=>{sel=Number(b.dataset.i);paint()});
       body.querySelector('#mvRouteGo').onclick=()=>done(sel);
-      body.querySelector('#mvRouteChoiceClose').onclick=()=>done(0);
-      // closed any other way (backdrop, back button): continue with the fastest road
-      const obs=new MutationObserver(()=>{if(!modal.classList.contains('show'))done(0)});
-      openModal('mvRouteChoiceModal');paint();
+      body.querySelector('#mvRouteChoiceClose').onclick=()=>done(null);
+      const obs=new MutationObserver(()=>{if(!modal.classList.contains('show'))done(null)});
+      openModal('mvRouteChoiceModal');paint();setTimeout(drawMap,350);
       setTimeout(()=>obs.observe(modal,{attributes:true,attributeFilter:['class']}),0);
     });
   }
@@ -4963,12 +4967,16 @@ window.addEventListener('load',()=>{
     const sig=routeSig(start,dest);
     try{const c=JSON.parse(sessionStorage.getItem(ROUTE_CHOICE_KEY)||'null');if(c&&c.sig===sig&&Array.isArray(c.points)&&c.points.length>3&&Date.now()-c.time<12*3600e3){currentAlt=c.index||0;return {ok:true,source:'osrm-chosen',points:c.points,distanceKm:c.distanceKm,alt:c.index||0,altCount:c.count||1,time:c.time}}}catch(_){}
     try{
-      const routes=await fetchRoutes(start,dest,NaN,msg=>{const o=q('routeResult');if(o)o.innerHTML=`<div class="routeDataLoading"><b>${msg}</b></div>`});
+      // roads for this trip are kept for 10 minutes, so closing and reopening the choice does not search again
+      const cached=routeCache[sig]&&Date.now()-routeCache[sig].time<600000?routeCache[sig].routes:null;
+      const routes=cached||await fetchRoutes(start,dest,NaN,msg=>{const o=q('routeResult');if(o)o.innerHTML=`<div class="routeDataLoading"><b>${msg}</b></div>`});
+      if(!cached&&routes.length)routeCache[sig]={time:Date.now(),routes};
       if(!routes.length)throw new Error('rota boş');
       const chosen=routes.length>1?await chooseRoute(routes,dest):routes[0];
+      if(!chosen){const err=new Error('Güzergah seçimi iptal edildi');err.cancelled=true;throw err}
       saveChoice(sig,chosen,routes.length);currentAlt=chosen.index;
       return {ok:true,source:'osrm-preline',points:chosen.points,distanceKm:chosen.distanceKm,alt:chosen.index,altCount:routes.length,time:Date.now()};
-    }catch(e){currentAlt=0;return {ok:false,source:'line-preline',points:[start,{lat:num(dest.lat,39.9334),lon:num(dest.lon,32.8597)}],distanceKm:hKm(start.lat,start.lon,dest.lat,dest.lon)*1.18,time:Date.now()}}
+    }catch(e){if(e&&e.cancelled)throw e;currentAlt=0;return {ok:false,source:'line-preline',points:[start,{lat:num(dest.lat,39.9334),lon:num(dest.lon,32.8597)}],distanceKm:hKm(start.lat,start.lon,dest.lat,dest.lon)*1.18,time:Date.now()}}
   }
   // Google Maps picks its own road between waypoints; on a non-default road add two shaping points along it.
   function shapedStops(road,stops){
@@ -5251,7 +5259,7 @@ window.addEventListener('load',()=>{
         mvTrip.prepare({points:prelim.points,dest,stops:plan.stops,battery,startEnergy:battery*soc/100,consumption,distance});
         out.querySelectorAll('a[href*="google.com/maps/dir"]').forEach(link=>link.addEventListener('click',()=>mvTrip.start()));
       }
-    }catch(err){console.error(err); if(out)out.innerHTML='<div class="routeWarn">Rota kontrolü şu anda cevap vermedi. Lütfen tekrar dene.</div>'; toast('Rota kontrolü cevap vermedi');}
+    }catch(err){if(err&&err.cancelled){if(out)out.innerHTML='';toast('Rota hesaplama iptal edildi');return} console.error(err); if(out)out.innerHTML='<div class="routeWarn">Rota kontrolü şu anda cevap vermedi. Lütfen tekrar dene.</div>'; toast('Rota kontrolü cevap vermedi');}
   };
   document.addEventListener('DOMContentLoaded',ensureSmartRouteOptions);
   window.addEventListener('load',ensureSmartRouteOptions);
@@ -7748,6 +7756,25 @@ renderProfile();
 document.addEventListener('mv-account',renderProfile);
 if(supported()&&Notification.permission==='granted'){let last=0;try{last=Number(localStorage.getItem(SYNCED))||0}catch(_){}if(Date.now()-last>86400000)subscribe().catch(err=>console.warn('MolaVolt bildirim:',err))}
 publicKey().then(k=>{if(k&&!isAdminPage())setTimeout(offer,15000)}).catch(()=>{});
+</script>
+<script>/* MV_MODAL_BACK_1108: every sheet (.modal.show) adds a history entry, so the Android back button closes the
+   sheet instead of leaving the app; closing a sheet with its own button removes that entry again. */
+(function(){
+  let ignorePop=0;
+  function changed(m){
+    const open=m.classList.contains('show');
+    if(open&&!m.__mvHist){m.__mvHist=true;try{history.pushState({mvModal:m.id||1},'')}catch(_){}}
+    else if(!open&&m.__mvHist){m.__mvHist=false;if(m.__mvByPop){m.__mvByPop=false;return}if(history.state&&history.state.mvModal){ignorePop++;history.back()}}
+  }
+  window.addEventListener('popstate',()=>{
+    if(ignorePop){ignorePop--;return}
+    const open=[...document.querySelectorAll('.modal.show')].filter(m=>m.__mvHist).pop();
+    if(open){open.__mvByPop=true;open.classList.remove('show')}
+  });
+  const watch=m=>{if(m.__mvWatched)return;m.__mvWatched=true;new MutationObserver(()=>changed(m)).observe(m,{attributes:true,attributeFilter:['class']});if(m.classList.contains('show'))changed(m)};
+  document.querySelectorAll('.modal').forEach(watch);
+  new MutationObserver(list=>{for(const r of list)r.addedNodes.forEach(n=>{if(n.nodeType===1){if(n.classList&&n.classList.contains('modal'))watch(n);n.querySelectorAll&&n.querySelectorAll('.modal').forEach(watch)}})}).observe(document.body,{childList:true,subtree:true});
+})();
 </script>
 </body>
 </html>
