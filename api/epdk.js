@@ -136,8 +136,24 @@ export default async function handler(req, res) {
   const attempts=[{label:"GET body boş obje",body:"{}"},{label:"GET body boş string",body:JSON.stringify("")},{label:"GET body string obje",body:JSON.stringify("{}")},{label:"GET body null alanlar",body:JSON.stringify({lisansNo:null,sarjIstasyonuAdi:null,sarjIstasyonuNo:null,markaAdi:null,yesilSarjIstasyonuMu:null,hizmetSekli:null})},{label:"GET body boş alanlar",body:JSON.stringify({lisansNo:"",sarjIstasyonuAdi:"",sarjIstasyonuNo:"",markaAdi:"",yesilSarjIstasyonuMu:"",hizmetSekli:""})}];
   // EPDK rate-limits callers (HTTP 429 "QUOTA limit"). Every extra attempt spends quota, so stop at the first 429
   // and only try the other body formats when EPDK rejects the request format itself (HTTP 400).
+  let quotaHit=false;
   const logs=[];for(const attempt of attempts){const r=await epdkRequest(attempt.body,attempt.label);const rowCount=getRows(r.json).length;logs.push({label:r.label,statusCode:r.statusCode,numRows:rowCount,sample:r.raw.slice(0,500)});if(r.statusCode===200&&rowCount>0){res.setHeader("Cache-Control","public, max-age=0, s-maxage=3600, stale-while-revalidate=86400, stale-if-error=86400");res.setHeader("CDN-Cache-Control","public, s-maxage=3600, stale-while-revalidate=86400, stale-if-error=86400");return res.status(200).send(JSON.stringify(normalizeResponse(r.json)))}
-    if(r.statusCode===429||/QUOTA/i.test(r.raw.slice(0,800))){res.setHeader("Retry-After","3600");return res.status(503).send(JSON.stringify({ok:false,quota:true,error:"EPDK istek kotası doldu. EPDK kısa sürede çok sayıda istek gelince bir süre veri vermiyor; yaklaşık 1 saat sonra tek bir kez tekrar dene. Mevcut istasyon listesi kullanılmaya devam ediyor.",attempts:logs},null,2))}
+    if(r.statusCode===429||/QUOTA/i.test(r.raw.slice(0,800))){quotaHit=true;break}
     if(r.statusCode!==400)break}
+  // EPDK keeps refusing Vercel's shared addresses ("QUOTA limit"), even hours later. A GitHub Actions job
+  // (.github/workflows/mirror-epdk.yml) copies the full EPDK answer every 6 hours to the epdk-data branch; serve that.
+  const mirror=await new Promise(resolve=>{
+    const rq=https.request({hostname:"raw.githubusercontent.com",path:"/ufukcicek81/molavolt/epdk-data/epdk.json",method:"GET",headers:{"User-Agent":"MolaVolt/1.2",Accept:"application/json"},timeout:45000},resp=>{
+      let data="";resp.setEncoding("utf8");resp.on("data",c=>{data+=c});resp.on("end",()=>{let json=null;try{json=JSON.parse(data)}catch(e){}resolve({statusCode:resp.statusCode||500,json})});
+    });
+    rq.on("timeout",()=>rq.destroy(new Error("mirror timeout")));rq.on("error",()=>resolve({statusCode:502,json:null}));rq.end();
+  });
+  if(mirror.statusCode===200&&getRows(mirror.json).length>1000){
+    res.setHeader("X-MolaVolt-Source","github-mirror");
+    res.setHeader("Cache-Control","public, max-age=0, s-maxage=1800, stale-while-revalidate=86400, stale-if-error=86400");
+    res.setHeader("CDN-Cache-Control","public, s-maxage=1800, stale-while-revalidate=86400, stale-if-error=86400");
+    return res.status(200).send(JSON.stringify(normalizeResponse(mirror.json)));
+  }
+  if(quotaHit){res.setHeader("Retry-After","3600");return res.status(503).send(JSON.stringify({ok:false,quota:true,error:"EPDK istek kotası doldu ve yedek kopya da okunamadı. Mevcut istasyon listesi kullanılmaya devam ediyor; biraz sonra tekrar dene.",attempts:logs},null,2))}
   return res.status(502).send(JSON.stringify({ok:false,error:"EPDK bağlantısı çalıştı ama istasyon verisi ayrıştırılamadı",note:"EPDK'nın güncel REST servisinden gelen iç içe/string JSON cevap formatları da denendi.",attempts:logs},null,2));
 }

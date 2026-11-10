@@ -1,0 +1,45 @@
+name: Mirror EPDK stations
+# EPDK refuses requests from Vercel's shared addresses with "QUOTA limit" for hours, while GitHub's runners get the
+# data. Every 6 hours this copies the full EPDK answer to the epdk-data branch (a single commit, replaced each time,
+# so the repository does not grow); api/epdk.js serves it when EPDK refuses.
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: mirror-epdk
+  cancel-in-progress: false
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download from EPDK
+        run: |
+          curl -sS -m 120 --retry 2 --retry-delay 20 -X GET \
+            -H 'Content-Type: application/json' -H 'Accept: application/json' -H 'User-Agent: MolaVolt/1.2' \
+            --data '{}' -o epdk.json -w "HTTP %{http_code}, %{size_download} bytes\n" https://apigateway.epdk.gov.tr/sarjIstasyonlari/
+      - name: Check the data
+        run: |
+          python3 - <<'PY'
+          import json, sys, datetime
+          d = json.load(open('epdk.json'))
+          rows = d.get('data') if isinstance(d, dict) else None
+          n = len(rows) if isinstance(rows, list) else 0
+          print('stations:', n)
+          if n < 1000:
+              print(open('epdk.json').read()[:600]); sys.exit('EPDK did not return the station list')
+          json.dump({'stations': n, 'fetchedAt': datetime.datetime.utcnow().isoformat() + 'Z'}, open('meta.json', 'w'))
+          PY
+      - name: Publish to the epdk-data branch
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir out && mv epdk.json meta.json out/ && cd out
+          git init -q -b epdk-data
+          git config user.name "molavolt-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add epdk.json meta.json
+          git commit -q -m "EPDK station list $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -q --force "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" epdk-data
