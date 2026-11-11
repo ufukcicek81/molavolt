@@ -5251,6 +5251,41 @@ window.addEventListener('load',()=>{
       }catch(e){info('Güncellenemedi; bağlantı gelince tekrar dene.')}
       finally{busyOverlay(false);busy=false}
     }
+    /* MV_AFTER_CHARGE_1111: after a charging stop the driver says how far the battery was charged (the app does not
+       guess). Asked when leaving a planned stop (or coming back to the app there), or with "Burada şarj ettim". */
+    function askCharge(i){
+      const st=(t&&t.stops||[])[i];if(!st)return;
+      t.asked=t.asked||{};t.asked[i]=true;t.atStop=null;t.lastAsk=Date.now();
+      let modal=document.getElementById('mvChargeModal');
+      if(!modal){modal=document.createElement('div');modal.className='modal';modal.id='mvChargeModal';modal.innerHTML='<div class="sheet"><button class="close" type="button" onclick="closeModal(\'mvChargeModal\')" aria-label="Kapat">×</button><div id="mvChargeBody"></div></div>';document.body.appendChild(modal)}
+      const body=modal.querySelector('#mvChargeBody');
+      const name=typeof displayName==='function'?displayName(st):st.name;
+      body.innerHTML=`<div class="mvLocIcon" aria-hidden="true" style="width:58px;height:58px;border-radius:18px;display:grid;place-items:center;background:var(--accentGrad);color:var(--onAccent);margin-bottom:14px;font-size:28px">⚡</div><h2 style="margin:0 0 6px">Şarjın yüzde kaça doldu?</h2><p class="muted" style="margin:0 0 12px"><b>${esc2(name||'Mola')}</b> — göstergedeki şarj yüzdesini yaz. Sonraki molaları bu değere göre hesaplarız.</p><div style="display:flex;gap:8px"><input id="mvChargeVal" type="number" inputmode="numeric" min="1" max="100" placeholder="Şarj %" style="flex:1;min-width:0"><button type="button" class="mvBtn primary" id="mvChargeOk">Kaydet ve devam et</button></div><button type="button" class="secondaryBtn" id="mvChargeNo" style="margin-top:10px">Şarj etmedim</button>`;
+      body.querySelector('#mvChargeOk').onclick=()=>{const v=Number(String(body.querySelector('#mvChargeVal').value||'').replace(',','.'));if(!(v>0&&v<=100)){alert('Göstergedeki şarj yüzdesini yaz (1–100).');return}closeModal('mvChargeModal');afterCharge(v,name)};
+      body.querySelector('#mvChargeNo').onclick=()=>{closeModal('mvChargeModal');info('Bu durakta şarj edilmedi; istersen aşağıdan güncel şarjını yazıp planı yenileyebilirsin.')};
+      openModal('mvChargeModal');setTimeout(()=>{try{body.querySelector('#mvChargeVal').focus()}catch(_){}},200);
+    }
+    async function afterCharge(pct,name){
+      if(busy)return;busy=true;
+      busyOverlay(true,'Rota güncelleniyor…','Sonraki molalar yeni şarjına göre hesaplanıyor');
+      try{
+        const p=await new Promise(res=>navigator.geolocation?navigator.geolocation.getCurrentPosition(res,()=>res(null),{enableHighAccuracy:true,maximumAge:30000,timeout:15000}):res(null));
+        const pos=p?{lat:p.coords.latitude,lon:p.coords.longitude,acc:p.coords.accuracy}:t.lastOn;
+        const socEl=q('rp_soc');if(socEl){socEl.value=String(Math.round(pct));socEl.dispatchEvent(new Event('input',{bubbles:true}))}
+        if(pos){
+          userPos={lat:pos.lat,lon:pos.lon,accuracy:pos.acc||0};try{savePos(userPos)}catch(_){}
+          try{const routes=(await osrmRoutes([pos,t.dest],NaN,false,7000)).map((r,i)=>({...r,index:i}));if(routes.length)saveChoice(routeSig(pos,t.dest),routes[0],1)}catch(_){}
+          try{buildStations()}catch(_){}
+        }
+        try{sessionStorage.setItem('mvRerouteNote',`${name?name+' durağında ':''}şarjını %${Math.round(pct)}’e kadar doldurdun. Sonraki molalar bu değere göre yeniden hesaplandı.`)}catch(_){}
+        busy=false;
+        if(window.planEvRoute)await window.planEvRoute();
+        start(true);
+      }catch(e){info('Güncellenemedi; bağlantı gelince tekrar dene.')}
+      finally{busyOverlay(false);busy=false}
+    }
+    // which planned stop is this position at (within 400 m)?
+    const stopAt=pos=>(t.stops||[]).findIndex((s,i)=>!(t.asked&&t.asked[i])&&Number.isFinite(Number(s.lat))&&hKm(pos.lat,pos.lon,Number(s.lat),Number(s.lon))<=0.4);
     // back in the app during a trip after 20 minutes or more: ask for the battery level shown in the car
     function askSoc(){
       let modal=document.getElementById('mvSocModal');
@@ -5262,7 +5297,15 @@ window.addEventListener('load',()=>{
       if(!t||!t.active||busy)return;
       const pos={lat:p.coords.latitude,lon:p.coords.longitude,acc:p.coords.accuracy};
       if(hKm(pos.lat,pos.lon,Number(t.dest.lat),Number(t.dest.lon))<1.5){info('Hedefe vardın. Takip kapatıldı.');stop(false);return}
+      const here=stopAt(pos);
+      if(here>=0){if(!t.atStop||t.atStop.i!==here)t.atStop={i:here,since:Date.now()};info('Moladasın. Şarjın bitince yüzde kaça doldurduğunu soracağız.');return}
+      if(t.atStop&&hKm(pos.lat,pos.lon,Number(t.stops[t.atStop.i].lat),Number(t.stops[t.atStop.i].lon))>1){askCharge(t.atStop.i);return} // leaving the stop
       const m=projection(t.points,pos);
+      if(m.distance<=1.5){
+        // passed a planned stop since the last known point (MolaVolt was closed meanwhile): ask about that stop
+        const passed=(t.stops||[]).findIndex((st,k)=>!(t.asked&&t.asked[k])&&(st.routeProgress||0)*t.distance>(t.lastAlong||0)-0.5&&(st.routeProgress||0)*t.distance<m.alongKm-2);
+        if(passed>=0&&m.alongKm-(t.lastAlong||0)>3){t.lastAlong=m.alongKm;t.lastOn=pos;askCharge(passed);return}
+      }
       if(m.distance<=1.5){off=0;t.lastAlong=m.alongKm;t.lastOn=pos;t.offKm=0;info('Güzergah takibi açık · seçtiğin yoldasın.');return}
       if((pos.acc||0)>200)return;
       off++;t.offKm=t.lastOn?hKm(t.lastOn.lat,t.lastOn.lon,pos.lat,pos.lon):0;
@@ -5276,7 +5319,11 @@ window.addEventListener('load',()=>{
     function start(quiet){if(!t)return;if(!t.active)t.lastAsk=Date.now();t.active=true;try{sessionStorage.setItem('mvTripOn','1')}catch(_){}watch();btn();if(!quiet)info('Güzergah takibi açık. MolaVolt açıkken ya da uygulamaya döndüğünde konumun kontrol edilir.')}
     function stop(manual){if(t)t.active=false;unwatch();btn();try{sessionStorage.removeItem('mvTripOn')}catch(_){}if(manual)info('Takip kapalı.')}
     // the driver navigates in Google Maps; when MolaVolt comes back to the front, check the position once
-    document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&t&&t.active&&!busy&&Date.now()-(t.lastAsk||0)>20*60000){askSoc();return}if(document.visibilityState==='visible'&&t&&t.active&&navigator.geolocation){navigator.geolocation.getCurrentPosition(p=>{off=Math.max(off,1);onPos(p)},()=>{},{enableHighAccuracy:true,maximumAge:20000,timeout:15000})}});
+    document.addEventListener('visibilitychange',()=>{
+      if(document.visibilityState!=='visible'||!t||!t.active||busy)return;
+      if(t.atStop&&Date.now()-t.atStop.since>5*60000){askCharge(t.atStop.i);return} // was charging there
+      if(Date.now()-(t.lastAsk||0)>20*60000){askSoc();return}
+      if(navigator.geolocation){navigator.geolocation.getCurrentPosition(p=>{off=Math.max(off,1);onPos(p)},()=>{},{enableHighAccuracy:true,maximumAge:20000,timeout:15000})}});
     window.mvTrip={get state(){return t},start,stop,checkIn};
     return {prepare,start,stop,checkIn};
   })();
@@ -5310,7 +5357,7 @@ window.addEventListener('load',()=>{
       const pack=await packPromise; const plan=await buildPlan(pack.list,dest,distance,battery,soc,arrival,target,consumption,price,chargeKw,{force80:!!q('rp_force80')?.checked});
       const energyNeed=distance*consumption/100; const lowSocProblem=!plan.ok; const roadUnverified=!prelim.ok; const url=mapsUrl(dest,shapedStops(prelim,plan.stops));
       let stopHtml='';
-      if(plan.stops.length){stopHtml='<div class="routeStopPreview"><b>Önerilen şarj durakları</b>'+plan.stops.map((s,i)=>`<div class="routeStopPreviewItem"><b>${i+1}. ${esc2(s.name)}</b><br>${esc2(s.address||'')}<br>Yola sapma: <b>${num(s.routeDeviation,0).toFixed(1)} km</b> · Varışta şarj: <b>%${Math.round(s.arrivalSoc)}</b><br>Şarj: <b>${s.chargeKwh.toFixed(1)} kWh</b> · Süre: <b>${s.chargeTimeText||((s.chargeMinLow&&s.chargeMinHigh)?(s.chargeMinLow+'-'+s.chargeMinHigh+' dk'):(s.chargeMin+' dk'))}</b> · Maliyet: <b>${s.cost.toFixed(0)} TL</b>${q('rp_force80')?.checked?`<br>Bu moladan çıkış: <b>%${Math.min(80,Math.round(s.chargeToSoc||80))}</b>`:''}</div>`).join('')+'</div>';}
+      if(plan.stops.length){stopHtml='<div class="routeStopPreview"><b>Önerilen şarj durakları</b>'+plan.stops.map((s,i)=>`<div class="routeStopPreviewItem"><b>${i+1}. ${esc2(s.name)}</b><br>${esc2(s.address||'')}<br>Yola sapma: <b>${num(s.routeDeviation,0).toFixed(1)} km</b> · Varışta şarj: <b>%${Math.round(s.arrivalSoc)}</b><br><button type="button" class="secondaryBtn mvChargedBtn" data-i="${i}" style="margin:6px 0">⚡ Burada şarj ettim</button><br>Şarj: <b>${s.chargeKwh.toFixed(1)} kWh</b> · Süre: <b>${s.chargeTimeText||((s.chargeMinLow&&s.chargeMinHigh)?(s.chargeMinLow+'-'+s.chargeMinHigh+' dk'):(s.chargeMin+' dk'))}</b> · Maliyet: <b>${s.cost.toFixed(0)} TL</b>${q('rp_force80')?.checked?`<br>Bu moladan çıkış: <b>%${Math.min(80,Math.round(s.chargeToSoc||80))}</b>`:''}</div>`).join('')+'</div>';}
       else if(lowSocProblem){stopHtml='<p class="strongWarn">Bu şarjla gidiş yönünde güvenli şarj durağı bulunamadı. Lütfen en yakın güvenli noktaya yönlenmeden önce şarj durumunu kontrol et.</p>';}
       else{stopHtml='<p>Bu değerlerle şarj molası gerekmiyor.</p>';}
       if(lowSocProblem&&plan.stops.length)stopHtml+='<div class="routeWarn"><b>Rota tamamlanamadı.</b> Duraklar tüm yolculuk için yeterli değil. Güvenli rota olarak kullanma.</div>';
@@ -5334,6 +5381,7 @@ window.addEventListener('load',()=>{
         mvTrip.prepare({points:prelim.points,dest,stops:plan.stops,battery,startEnergy:battery*soc/100,consumption,baseConsumption,distance});
         out.querySelectorAll('a[href*="google.com/maps/dir"]').forEach(link=>link.addEventListener('click',()=>mvTrip.start()));
         const socBtn=out.querySelector('#mvSocBtn');if(socBtn)socBtn.onclick=()=>mvTrip.checkIn(out.querySelector('#mvSocNow').value);
+        out.querySelectorAll('.mvChargedBtn').forEach(b=>b.onclick=()=>mvTrip.askCharge(Number(b.dataset.i)));
       }
     }catch(err){busyOverlay(false);if(err&&err.cancelled){if(out)out.innerHTML='';toast('Rota hesaplama iptal edildi');return} console.error(err); if(out)out.innerHTML='<div class="routeWarn">Rota kontrolü şu anda cevap vermedi. Lütfen tekrar dene.</div>'; toast('Rota kontrolü cevap vermedi');}
   };
