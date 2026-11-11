@@ -10,8 +10,8 @@ android {
         applicationId 'com.molavolt.app'
         minSdk 24
         targetSdk 36
-        versionCode 10009
-        versionName '1.0.0.9'
+        versionCode 10010
+        versionName '1.0.1.0'
     }
 
     sourceSets {
@@ -55,6 +55,8 @@ android {
 dependencies {
     implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.7.3'
     implementation 'com.google.androidbrowserhelper:locationdelegation:1.1.2'
+    implementation 'com.google.android.gms:play-services-location:21.3.0'
+    implementation 'androidx.core:core:1.13.1'
 }
 
 // Use the MolaVolt logo files at the repository root: no placeholder app icon.
