@@ -5255,7 +5255,7 @@ window.addEventListener('load',()=>{
        guess). Asked when leaving a planned stop (or coming back to the app there), or with "Burada şarj ettim". */
     function askCharge(i){
       const st=(t&&t.stops||[])[i];if(!st)return;
-      t.asked=t.asked||{};t.asked[i]=true;t.atStop=null;t.lastAsk=Date.now();
+      t.asked=t.asked||{};t.asked[i]=true;t.atStop=null;t.lastAsk=Date.now();persist();
       let modal=document.getElementById('mvChargeModal');
       if(!modal){modal=document.createElement('div');modal.className='modal';modal.id='mvChargeModal';modal.innerHTML='<div class="sheet"><button class="close" type="button" onclick="closeModal(\'mvChargeModal\')" aria-label="Kapat">×</button><div id="mvChargeBody"></div></div>';document.body.appendChild(modal)}
       const body=modal.querySelector('#mvChargeBody');
@@ -5315,17 +5315,53 @@ window.addEventListener('load',()=>{
     }
     function watch(){if(watchId==null&&navigator.geolocation)watchId=navigator.geolocation.watchPosition(onPos,()=>{},{enableHighAccuracy:true,maximumAge:15000,timeout:30000})}
     function unwatch(){if(watchId!=null&&navigator.geolocation)navigator.geolocation.clearWatch(watchId);watchId=null}
-    function prepare(d){const keep=t&&t.active;t={...d,active:keep,lastAlong:0,lastOn:null,offKm:0,lastReroute:t?t.lastReroute:0,lastAsk:t?t.lastAsk:Date.now(),ref:{along:0,energy:d.startEnergy}};off=0;btn();if(keep){watch();info('Güzergah takibi açık.')}else info('“Yola çık” dediğinde ya da takibi başlattığında, yoldan saparsan molaları yeni yola göre yeniden hesaplarız.')}
-    function start(quiet){if(!t)return;if(!t.active)t.lastAsk=Date.now();t.active=true;try{sessionStorage.setItem('mvTripOn','1')}catch(_){}watch();btn();if(!quiet)info('Güzergah takibi açık. MolaVolt açıkken ya da uygulamaya döndüğünde konumun kontrol edilir.')}
-    function stop(manual){if(t)t.active=false;unwatch();btn();try{sessionStorage.removeItem('mvTripOn')}catch(_){}if(manual)info('Takip kapalı.')}
+    /* MV_TRIP_NATIVE_1111: drivers navigate in Google Maps, so in the Android app "Yola çık" starts TripService (via
+       molavolt://trip), which follows the drive in the background and sends the stop / charge notifications. Tapping
+       one opens MolaVolt with ?mvCharge=<stop> or ?mvSoc=1; the trip is kept in localStorage to answer it. */
+    const TRIP_KEY='mv_trip_1111';
+    const inApp=()=>{try{return sessionStorage.getItem('mvInApp')==='1'||matchMedia('(display-mode: standalone)').matches}catch(_){return false}};
+    function persist(){if(!t)return;try{const pts=[];let last=null;for(const p of t.points||[]){if(!last||hKm(last.lat,last.lon,p.lat,p.lon)>=1){pts.push(p);last=p}}
+      localStorage.setItem(TRIP_KEY,JSON.stringify({...t,points:pts,stops:(t.stops||[]).map(s=>({id:s.id,name:s.name,address:s.address,lat:s.lat,lon:s.lon,routeProgress:s.routeProgress,chargeToSoc:s.chargeToSoc,arrivalSoc:s.arrivalSoc})),savedAt:Date.now()}))}catch(_){}}
+    function restore(){
+      if(t)return true;
+      let d=null;try{d=JSON.parse(localStorage.getItem(TRIP_KEY)||'null')}catch(_){}
+      if(!d||Date.now()-(d.savedAt||0)>20*3600e3||!d.dest)return false;
+      t=d;
+      // the route form needs the trip back to re-plan
+      try{routeSelectedDest={name:d.dest.name||'Hedef',lat:Number(d.dest.lat),lon:Number(d.dest.lon),source:'google-places'};window.mvGooglePlaceSelected=routeSelectedDest;mvGoogleRouteSelectedInput=routeSelectedDest.name}catch(_){}
+      const set=(id,v)=>{const el=q(id);if(el&&v!=null&&v!=='')el.value=String(v)};
+      set('rp_dest',d.dest.name||'');set('rp_battery',d.battery);set((q('rp_mode')?.value||'manual')==='wltp'?'rp_wltp':'rp_manual',d.baseConsumption);
+      return true;
+    }
+    function nativeUrl(mapsHref){
+      if(!t||!inApp())return null;
+      const trip={d:{la:Number(t.dest.lat),lo:Number(t.dest.lon),n:String(t.dest.name||'')},s:(t.stops||[]).slice(0,10).map(s=>({la:Number(s.lat),lo:Number(s.lon),n:String((typeof displayName==='function'?displayName(s):s.name)||'Mola').slice(0,60)})),maps:mapsHref};
+      return `intent://trip?d=${encodeURIComponent(JSON.stringify(trip))}#Intent;scheme=molavolt;package=com.molavolt.app;S.browser_fallback_url=${encodeURIComponent(mapsHref)};end`;
+    }
+    // opened from a trip notification
+    async function handleLaunch(){
+      const qs=new URLSearchParams(location.search),charge=qs.get('mvCharge'),soc=qs.get('mvSoc'),trip=qs.get('mvTrip');
+      if(charge===null&&soc===null&&trip===null)return;
+      try{history.replaceState(null,'',location.pathname)}catch(_){}
+      for(let k=0;k<60&&!((typeof stations!=='undefined')&&stations.length);k++)await new Promise(r=>setTimeout(r,500));
+      if(!restore()){alert('Yolculuk bilgisi bulunamadı. Rotayı yeniden hesaplayabilirsin.');return}
+      try{showTab('route')}catch(_){}
+      t.active=true;watch();
+      if(charge!==null)askCharge(Number(charge));
+      else if(soc!==null)askSoc();
+    }
+    window.addEventListener('load',()=>setTimeout(handleLaunch,600));
+    function prepare(d){const keep=t&&t.active;t={...d,active:keep,lastAlong:0,lastOn:null,offKm:0,lastReroute:t?t.lastReroute:0,lastAsk:t?t.lastAsk:Date.now(),ref:{along:0,energy:d.startEnergy}};setTimeout(persist,0);off=0;btn();if(keep){watch();info('Güzergah takibi açık.')}else info('“Yola çık” dediğinde ya da takibi başlattığında, yoldan saparsan molaları yeni yola göre yeniden hesaplarız.')}
+    function start(quiet){if(!t)return;if(!t.active)t.lastAsk=Date.now();t.active=true;setTimeout(persist,0);try{sessionStorage.setItem('mvTripOn','1')}catch(_){}watch();btn();if(!quiet)info('Güzergah takibi açık. MolaVolt açıkken ya da uygulamaya döndüğünde konumun kontrol edilir.')}
+    function stop(manual){if(t)t.active=false;unwatch();btn();persist();try{sessionStorage.removeItem('mvTripOn')}catch(_){}if(manual)info('Takip kapalı.')}
     // the driver navigates in Google Maps; when MolaVolt comes back to the front, check the position once
     document.addEventListener('visibilitychange',()=>{
       if(document.visibilityState!=='visible'||!t||!t.active||busy)return;
       if(t.atStop&&Date.now()-t.atStop.since>5*60000){askCharge(t.atStop.i);return} // was charging there
       if(Date.now()-(t.lastAsk||0)>20*60000){askSoc();return}
       if(navigator.geolocation){navigator.geolocation.getCurrentPosition(p=>{off=Math.max(off,1);onPos(p)},()=>{},{enableHighAccuracy:true,maximumAge:20000,timeout:15000})}});
-    window.mvTrip={get state(){return t},start,stop,checkIn};
-    return {prepare,start,stop,checkIn};
+    window.mvTrip={get state(){return t},start,stop,checkIn,askCharge,nativeUrl};
+    return {prepare,start,stop,checkIn,askCharge,nativeUrl};
   })();
 
   window.planEvRoute=async function(){
@@ -5379,7 +5415,7 @@ window.addEventListener('load',()=>{
           <div style="margin-top:12px;padding:12px;border-radius:14px;border:1px solid var(--line)"><b style="font-size:14px">Yoldayken şarjını güncelle</b><p class="muted" style="font-size:12px;margin:4px 0 8px">Göstergedeki şarj yüzdesini yaz; gerçek tüketimini hesaplayıp molaları yeniden planlarız.</p><div style="display:flex;gap:8px"><input id="mvSocNow" type="number" inputmode="numeric" min="1" max="100" placeholder="Şarj %" style="flex:1;min-width:0"><button type="button" class="mvBtn primary" id="mvSocBtn">Güncelle</button></div></div>`;
         card.appendChild(tools);
         mvTrip.prepare({points:prelim.points,dest,stops:plan.stops,battery,startEnergy:battery*soc/100,consumption,baseConsumption,distance});
-        out.querySelectorAll('a[href*="google.com/maps/dir"]').forEach(link=>link.addEventListener('click',()=>mvTrip.start()));
+        out.querySelectorAll('a[href*="google.com/maps/dir"]').forEach(link=>link.addEventListener('click',ev=>{mvTrip.start();const u=mvTrip.nativeUrl(link.href);if(u){ev.preventDefault();location.href=u}}));
         const socBtn=out.querySelector('#mvSocBtn');if(socBtn)socBtn.onclick=()=>mvTrip.checkIn(out.querySelector('#mvSocNow').value);
         out.querySelectorAll('.mvChargedBtn').forEach(b=>b.onclick=()=>mvTrip.askCharge(Number(b.dataset.i)));
       }
