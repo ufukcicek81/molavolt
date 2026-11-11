@@ -5097,13 +5097,17 @@ window.addEventListener('load',()=>{
   }
 
   async function buildPlan(list,dest,distance,battery,soc,arrival,target,consumption,price,chargeKw,opts){
-    const finalReserve=battery*Math.max(0,arrival)/100; let energy=battery*Math.max(0,soc)/100; let progress=0; const stops=[]; const usedIds=new Set(); let lowMode=soc<=15;
+    /* MV_SAFE_15_1111: after a driver was stranded, every stop and the destination are reached with at least 15%,
+       stations drivers reported broken in the last 24 h are skipped, and each stop gets a backup station before it. */
+    const cs=s=>{try{return window.mvCommunityStatus?window.mvCommunityStatus(s):null}catch(_){return null}};
+    list=(list||[]).filter(s=>{const c=cs(s);return !(c&&c.status==='broken')});
+    const finalReserve=battery*Math.max(15,num(arrival,15))/100; let energy=battery*Math.max(0,soc)/100; let progress=0; const stops=[]; const usedIds=new Set(); let lowMode=soc<=15;
     const force80=!!opts?.force80; const forceLimitPct=80; const forceLimitEnergy=battery*forceLimitPct/100;
     for(let i=0;i<14;i++){
       /* MV_SAFE_ARRIVAL_1111: a driver ran out of charge 5 km before a planned stop (real use 27–28 kWh/100 km instead
          of the 19 entered, with an 8% margin that could even drop to ~2%). Every stop is now reached with at least 10%
          left; there is no thinner fallback: if no station allows it, the plan stays incomplete and says so. */
-      const looseReserve=(i===0&&lowMode)?Math.min(0.5,Math.max(0.15,battery*0.006)):Math.max(2.5,battery*0.10);
+      const looseReserve=(i===0&&lowMode)?Math.min(0.5,Math.max(0.15,battery*0.006)):Math.max(3,battery*0.15);
       let travelReserve=looseReserve;
       /* MV_EV_SAFETY_1008 */ const remainingToFinishKm=Math.max(0,(1-progress)*distance);
       const lastDetour=stops.length?Math.max(0,num(stops[stops.length-1].routeDeviation,0)):0;
@@ -5162,7 +5166,15 @@ window.addEventListener('load',()=>{
       if(force80) chargeTo=Math.min(chargeTo, forceLimitEnergy);
       const chargeKwh=Math.max(0,chargeTo-arrivalEnergy); if(chargeKwh<0.05)break;
       const kw=stKw(stop)||chargeKw||90; const tr=chargeTimeRange(chargeKwh,kw);
-      stops.push({...stop,arrivalSoc:arrivalEnergy/battery*100,chargeToSoc:chargeTo/battery*100,chargeKwh,chargeMin:Math.ceil((tr.min+tr.max)/2),chargeMinLow:tr.min,chargeMinHigh:tr.max,chargeTimeText:tr.text,cost:chargeKwh*price,effectiveKw:kw,emergencyFirst:i===0&&lowMode});
+      let backup=null;
+      if(!(i===0&&lowMode)){
+        const sp=num(stop.routeProgress,0);
+        const b=list.filter(s=>s.id!==stop.id&&!usedIds.has(s.id)&&s.routeProgress>progress+0.004&&s.routeProgress<sp-0.001&&(sp-s.routeProgress)*distance<=70&&num(s.routeDeviation,0)<=5&&(stKw(s)||0)>=40&&cs(s)?.status!=='busy')
+          .sort((a,b)=>(b.routeProgress*distance+Math.min(18,(stKw(b)||0)/8))-(a.routeProgress*distance+Math.min(18,(stKw(a)||0)/8)))[0];
+        if(b)backup={name:b.name,address:b.address||'',lat:Number(b.lat),lon:Number(b.lon),kw:stKw(b)||0,kmBefore:Math.max(0,(sp-b.routeProgress)*distance),deviation:num(b.routeDeviation,0)};
+      }
+      const stc=cs(stop);
+      stops.push({...stop,backup,communityNote:stc&&stc.status==='busy'?stc.label:'',arrivalSoc:arrivalEnergy/battery*100,chargeToSoc:chargeTo/battery*100,chargeKwh,chargeMin:Math.ceil((tr.min+tr.max)/2),chargeMinLow:tr.min,chargeMinHigh:tr.max,chargeTimeText:tr.text,cost:chargeKwh*price,effectiveKw:kw,emergencyFirst:i===0&&lowMode});
       energy=chargeTo; progress=nextProgress; lowMode=false;
     }
     const finalDetour=stops.length?Math.max(0,num(stops[stops.length-1].routeDeviation,0)):0;
@@ -5225,15 +5237,27 @@ window.addEventListener('load',()=>{
         const ref=t.ref||{along:0,energy:t.startEnergy},km=Math.max(0,along-ref.along)+off,actual=pct/100*t.battery;
         const measurable=km>=15&&off<=20&&!stopBetween(ref.along,along); // far off the road: distance driven is unknown
         const expectedPct=measurable?Math.round(Math.max(0,ref.energy-km*t.consumption/100)/t.battery*100):null;
-        const lines=[];
+        const lines=[];let observedOk=0;
         if(measurable){
-          const observed=(ref.energy-actual)/km*100,base=Number(t.baseConsumption)||18;
+          const observed=(ref.energy-actual)/km*100,base=Number(t.enteredConsumption||t.baseConsumption)||18;
           if(observed>base*0.5&&observed<=Math.min(55,base*2.2)){
-            lines.push(`Gerçek tüketimin yaklaşık ${observed.toFixed(1)} kWh/100 km (girdiğin ${Number(t.baseConsumption||0).toFixed(1)}).`);
+            observedOk=observed;
+            if(km>=30){try{localStorage.setItem('mv_learned_cons_1111',observed.toFixed(1))}catch(_){}} // MV_REAL_CONSUMPTION_1111: next trips start from it
+            lines.push(`Gerçek tüketimin yaklaşık ${observed.toFixed(1)} kWh/100 km (girdiğin ${base.toFixed(1)}).`);
             // from here on plan with the real figure, never below what was entered
             const use=Math.max(Number(t.baseConsumption)||0,observed);
             const fld=q((q('rp_mode')?.value||'manual')==='wltp'?'rp_wltp':'rp_manual');if(fld){fld.value=use.toFixed(1);fld.dispatchEvent(new Event('input',{bubbles:true}))}
           }
+        }
+        /* MV_LOW_ALARM_1111: if the charge the driver reports would leave less than 12% at the next planned stop (or the
+           destination), say so at once and list the nearest chargers that can still be reached. */
+        let alarm=null;
+        {
+          const consNow=Math.max(t.consumption,observedOk*1.1);
+          const next=(t.stops||[]).find(s=>(s.routeProgress||0)*t.distance>along+0.5);
+          const legKm=(next?(next.routeProgress||0)*t.distance-along+Math.max(0,num(next.routeDeviation,0)):Math.max(0,t.distance-along))+off;
+          const leftPct=(actual-legKm*consNow/100)/t.battery*100;
+          if(leftPct<12)alarm={pct,leftPct,legKm,target:next?(typeof displayName==='function'?displayName(next):next.name):(t.dest.name||'hedef'),near:pos?nearestChargers(pos,actual,consNow):[]};
         }
         t.ref={along,energy:actual};
         if(expectedPct!==null&&pct<expectedPct-3)lines.push(`Şarjın planlanandan düşük (beklenen yaklaşık %${expectedPct}).`);
@@ -5248,8 +5272,24 @@ window.addEventListener('load',()=>{
         busy=false;
         if(window.planEvRoute)await window.planEvRoute();
         start(true);
+        if(alarm){busyOverlay(false);lowAlarm(alarm)}
       }catch(e){info('Güncellenemedi; bağlantı gelince tekrar dene.')}
       finally{busyOverlay(false);busy=false}
+    }
+    function nearestChargers(pos,energy,cons){
+      const cs=s=>{try{return window.mvCommunityStatus?window.mvCommunityStatus(s):null}catch(_){return null}};
+      return (stations||[]).filter(s=>Number.isFinite(Number(s.lat))&&Number.isFinite(Number(s.lon))&&(stKw(s)||0)>=22)
+        .map(s=>({s,road:hKm(pos.lat,pos.lon,Number(s.lat),Number(s.lon))*1.3,kw:stKw(s)||0,st:cs(s)}))
+        .filter(x=>x.road<=60&&x.st?.status!=='broken'&&x.road*cons/100<=energy-t.battery*0.03)
+        .sort((a,b)=>(a.road+(a.kw<50?12:0)+(a.st?.status==='busy'?20:0))-(b.road+(b.kw<50?12:0)+(b.st?.status==='busy'?20:0))).slice(0,3);
+    }
+    function lowAlarm(a){
+      try{navigator.vibrate&&navigator.vibrate([300,150,300])}catch(_){}
+      let modal=document.getElementById('mvLowModal');
+      if(!modal){modal=document.createElement('div');modal.className='modal';modal.id='mvLowModal';modal.innerHTML='<div class="sheet"><button class="close" type="button" onclick="closeModal(\'mvLowModal\')" aria-label="Kapat">×</button><div id="mvLowBody"></div></div>';document.body.appendChild(modal)}
+      const items=a.near.map(x=>`<div style="padding:10px 0;border-top:1px solid var(--line)"><b>${esc2(typeof displayName==='function'?displayName(x.s):x.s.name)}</b><br><span class="muted" style="font-size:12px">yaklaşık ${Math.round(x.road)} km${x.kw?` · ${Math.round(x.kw)} kW`:''}${x.st?.status==='busy'?' · dolu bildirildi':''}</span><br><a class="mvBtn primary" style="display:inline-block;margin-top:6px;text-decoration:none" href="https://www.google.com/maps/dir/?api=1&destination=${Number(x.s.lat)},${Number(x.s.lon)}" target="_blank" rel="noopener">Haritada aç</a></div>`).join('');
+      modal.querySelector('#mvLowBody').innerHTML=`<div aria-hidden="true" style="width:58px;height:58px;border-radius:18px;display:grid;place-items:center;background:#e5484d;color:#fff;margin-bottom:14px;font-size:28px">!</div><h2 style="margin:0 0 6px;color:#e5484d">Bu şarjla güvenle yetişemezsin</h2><p style="margin:0 0 10px">Şarjın <b>%${Math.round(a.pct)}</b>. <b>${esc2(a.target)}</b> yaklaşık ${Math.round(a.legKm)} km; oraya ${a.leftPct<=0?'<b>yetmeyebilir</b>':`yaklaşık <b>%${Math.max(0,Math.round(a.leftPct))}</b> ile varırsın`}. En yakın istasyonda şarj et, hızını düşür ve klimayı kıs.</p>${items||'<p class="strongWarn">Menzil içinde istasyon bulunamadı. Hızını düşür, klimayı kapat ve yol yardımını aramayı düşün.</p>'}<p class="muted" style="font-size:12px;margin:10px 0 0">Molalar da bu şarja göre yeniden hesaplandı.</p>`;
+      openModal('mvLowModal');
     }
     /* MV_AFTER_CHARGE_1111: after a charging stop the driver says how far the battery was charged (the app does not
        guess). Asked when leaving a planned stop (or coming back to the app there), or with "Burada şarj ettim". */
@@ -5321,7 +5361,7 @@ window.addEventListener('load',()=>{
     const TRIP_KEY='mv_trip_1111';
     const inApp=()=>{try{return sessionStorage.getItem('mvInApp')==='1'||matchMedia('(display-mode: standalone)').matches}catch(_){return false}};
     function persist(){if(!t)return;try{const pts=[];let last=null;for(const p of t.points||[]){if(!last||hKm(last.lat,last.lon,p.lat,p.lon)>=1){pts.push(p);last=p}}
-      localStorage.setItem(TRIP_KEY,JSON.stringify({...t,points:pts,stops:(t.stops||[]).map(s=>({id:s.id,name:s.name,address:s.address,lat:s.lat,lon:s.lon,routeProgress:s.routeProgress,chargeToSoc:s.chargeToSoc,arrivalSoc:s.arrivalSoc})),savedAt:Date.now()}))}catch(_){}}
+      localStorage.setItem(TRIP_KEY,JSON.stringify({...t,points:pts,stops:(t.stops||[]).map(s=>({id:s.id,name:s.name,address:s.address,lat:s.lat,lon:s.lon,routeProgress:s.routeProgress,routeDeviation:s.routeDeviation,chargeToSoc:s.chargeToSoc,arrivalSoc:s.arrivalSoc})),savedAt:Date.now()}))}catch(_){}}
     function restore(){
       if(t)return true;
       let d=null;try{d=JSON.parse(localStorage.getItem(TRIP_KEY)||'null')}catch(_){}
@@ -5330,7 +5370,7 @@ window.addEventListener('load',()=>{
       // the route form needs the trip back to re-plan
       try{routeSelectedDest={name:d.dest.name||'Hedef',lat:Number(d.dest.lat),lon:Number(d.dest.lon),source:'google-places'};window.mvGooglePlaceSelected=routeSelectedDest;mvGoogleRouteSelectedInput=routeSelectedDest.name}catch(_){}
       const set=(id,v)=>{const el=q(id);if(el&&v!=null&&v!=='')el.value=String(v)};
-      set('rp_dest',d.dest.name||'');set('rp_battery',d.battery);set((q('rp_mode')?.value||'manual')==='wltp'?'rp_wltp':'rp_manual',d.baseConsumption);
+      set('rp_dest',d.dest.name||'');set('rp_battery',d.battery);set((q('rp_mode')?.value||'manual')==='wltp'?'rp_wltp':'rp_manual',d.enteredConsumption||d.baseConsumption);
       return true;
     }
     function nativeUrl(mapsHref){
@@ -5379,8 +5419,18 @@ window.addEventListener('load',()=>{
       if(typeof updateDataHealth0521==='function')updateDataHealth0521(ready.source||'memory',(stations||[]).length);
       let dest=null; try{dest=typeof resolveRouteDestination==='function'?await resolveRouteDestination():null}catch(_){} if(!dest){try{dest=typeof routeDirectDestination==='function'?routeDirectDestination():routeDestination()}catch(_){dest={name:q('rp_dest')?.value||'Ankara',lat:39.9334,lon:32.8597}}}
       const battery=val('rp_battery',60),soc=val('rp_soc',45),arrival=val('rp_arrival',10),target=val('rp_charge_target',80);
-      const mode=q('rp_mode')?.value||'manual'; const baseConsumption=mode==='wltp'?val('rp_wltp',15):val('rp_manual',18); const price=val('rp_price',val('rp_dc_price',10)),chargeKw=val('rp_kw',val('rp_charge_kw',90));
+      const mode=q('rp_mode')?.value||'manual'; let baseConsumption=mode==='wltp'?val('rp_wltp',15):val('rp_manual',18); const price=val('rp_price',val('rp_dc_price',10)),chargeKw=val('rp_kw',val('rp_charge_kw',90));
       const prelim=await baseRoute(dest); const distance=val('rp_distance',prelim.distanceKm||hKm(userPos.lat,userPos.lon,dest.lat,dest.lon)*1.18);
+      /* MV_REAL_CONSUMPTION_1111: a driver entered 19 kWh/100 km and really used 27–28 on the motorway. The plan never
+         uses less than the real figure measured on an earlier trip, nor (on long trips) a motorway minimum that grows
+         with the battery size, i.e. the car's weight. */
+      const enteredConsumption=baseConsumption;
+      let learned=0;try{learned=Number(localStorage.getItem('mv_learned_cons_1111'))||0}catch(_){}
+      if(!(learned>=8&&learned<=45))learned=0;
+      const hwFloor=distance>=80?Math.min(24,Math.max(17,13+battery*0.12)):0;
+      const consFloor=Math.max(learned,hwFloor);
+      const consRaised=consFloor>enteredConsumption+0.3?{to:consFloor,learned:learned>=hwFloor&&learned>enteredConsumption+0.3}:null;
+      if(consRaised)baseConsumption=consFloor;
       const elevPromise=elevationStats(prelim.points,distance,battery,baseConsumption);
       const quickBaseConsumption=(baseConsumption+(q('rp_climate')?.value==='high'?2.4:(q('rp_climate')?.value==='normal'?1.4:(q('rp_climate')?.value==='eco'?0.7:0)))+Math.max(0,Math.min(7,Math.round(num(q('rp_passengers')?.value,0))))*0.35)*(1+Math.max(0,Math.min(80,num(q('rp_safety')?.value,30)))/100);
       const startEnergy=battery*soc/100;
@@ -5393,16 +5443,17 @@ window.addEventListener('load',()=>{
       const pack=await packPromise; const plan=await buildPlan(pack.list,dest,distance,battery,soc,arrival,target,consumption,price,chargeKw,{force80:!!q('rp_force80')?.checked});
       const energyNeed=distance*consumption/100; const lowSocProblem=!plan.ok; const roadUnverified=!prelim.ok; const url=mapsUrl(dest,shapedStops(prelim,plan.stops));
       let stopHtml='';
-      if(plan.stops.length){stopHtml='<div class="routeStopPreview"><b>Önerilen şarj durakları</b>'+plan.stops.map((s,i)=>`<div class="routeStopPreviewItem"><b>${i+1}. ${esc2(s.name)}</b><br>${esc2(s.address||'')}<br>Yola sapma: <b>${num(s.routeDeviation,0).toFixed(1)} km</b> · Varışta şarj: <b>%${Math.round(s.arrivalSoc)}</b><br><button type="button" class="secondaryBtn mvChargedBtn" data-i="${i}" style="margin:6px 0">⚡ Burada şarj ettim</button><br>Şarj: <b>${s.chargeKwh.toFixed(1)} kWh</b> · Süre: <b>${s.chargeTimeText||((s.chargeMinLow&&s.chargeMinHigh)?(s.chargeMinLow+'-'+s.chargeMinHigh+' dk'):(s.chargeMin+' dk'))}</b> · Maliyet: <b>${s.cost.toFixed(0)} TL</b>${q('rp_force80')?.checked?`<br>Bu moladan çıkış: <b>%${Math.min(80,Math.round(s.chargeToSoc||80))}</b>`:''}</div>`).join('')+'</div>';}
+      if(plan.stops.length){stopHtml='<div class="routeStopPreview"><b>Önerilen şarj durakları</b>'+plan.stops.map((s,i)=>`<div class="routeStopPreviewItem"><b>${i+1}. ${esc2(s.name)}</b><br>${esc2(s.address||'')}<br>Yola sapma: <b>${num(s.routeDeviation,0).toFixed(1)} km</b> · Varışta şarj: <b>%${Math.round(s.arrivalSoc)}</b>${s.communityNote?`<br><b style="color:#f5a623">⚠ ${esc2(s.communityNote)}</b> — yedek istasyonu düşün.`:''}${s.backup?`<br><span class="muted" style="font-size:12px">Yedek: <b>${esc2(typeof displayName==='function'?displayName(s.backup):s.backup.name)}</b> · durağın ${Math.round(s.backup.kmBefore)} km öncesi${s.backup.kw?` · ${Math.round(s.backup.kw)} kW`:''} · <a href="https://www.google.com/maps/dir/?api=1&destination=${s.backup.lat},${s.backup.lon}" target="_blank" rel="noopener">Haritada aç</a></span>`:''}<br><button type="button" class="secondaryBtn mvChargedBtn" data-i="${i}" style="margin:6px 0">⚡ Burada şarj ettim</button><br>Şarj: <b>${s.chargeKwh.toFixed(1)} kWh</b> · Süre: <b>${s.chargeTimeText||((s.chargeMinLow&&s.chargeMinHigh)?(s.chargeMinLow+'-'+s.chargeMinHigh+' dk'):(s.chargeMin+' dk'))}</b> · Maliyet: <b>${s.cost.toFixed(0)} TL</b>${q('rp_force80')?.checked?`<br>Bu moladan çıkış: <b>%${Math.min(80,Math.round(s.chargeToSoc||80))}</b>`:''}</div>`).join('')+'</div>';}
       else if(lowSocProblem){stopHtml='<p class="strongWarn">Bu şarjla gidiş yönünde güvenli şarj durağı bulunamadı. Lütfen en yakın güvenli noktaya yönlenmeden önce şarj durumunu kontrol et.</p>';}
       else{stopHtml='<p>Bu değerlerle şarj molası gerekmiyor.</p>';}
       if(lowSocProblem&&plan.stops.length)stopHtml+='<div class="routeWarn"><b>Rota tamamlanamadı.</b> Duraklar tüm yolculuk için yeterli değil. Güvenli rota olarak kullanma.</div>';
       if(roadUnverified)stopHtml+='<div class="routeWarn">Yol servisi cevap vermedi; mesafe tahminidir. Yol ve istasyon erişimi doğrulanmadı.</div>';
       const climateText={off:'Klima kapalı',eco:'Hafif klima',normal:'Normal klima',high:'Yoğun klima'}[factors.climate]||'Klima';
       const passengerText=factors.passengers>0?`Sürücü + ${factors.passengers} yolcu`:'Sadece sürücü';
-      const effectHtml=`<div class="routeEffectNote"><b>Akıllı tüketim hesabı:</b> ${passengerText} · ${climateText}${elev.enabled?` · ${elev.note}`:''}<br>Ortalama tüketim: <b>${baseConsumption.toFixed(1)}</b> → <b>${consumption.toFixed(1)} kWh/100 km</b>${safetyPct?` <small>(%${safetyPct} güvenlik payı dahil)</small>`:''}<br>Her durağa en az <b>%10</b> şarjla varış planlandı.${q('rp_force80')?.checked?' · Her molada en fazla %80 hedeflendi':''}</div>`;
+      const effectHtml=`<div class="routeEffectNote"><b>Akıllı tüketim hesabı:</b> ${passengerText} · ${climateText}${elev.enabled?` · ${elev.note}`:''}<br>Ortalama tüketim: <b>${baseConsumption.toFixed(1)}</b> → <b>${consumption.toFixed(1)} kWh/100 km</b>${safetyPct?` <small>(%${safetyPct} güvenlik payı dahil)</small>`:''}${consRaised?`<br><b style="color:#f5a623">⚠ Tüketim yükseltildi:</b> girdiğin ${enteredConsumption.toFixed(1)} kWh/100 km ${consRaised.learned?'önceki yolculukta ölçülen gerçek tüketiminden':'bu uzunlukta otoyol yolculuğu için'} düşük; hesapta <b>${consRaised.to.toFixed(1)}</b> kullanıldı.`:''}<br>Her durağa ve hedefe en az <b>%15</b> şarjla varış planlandı.${q('rp_force80')?.checked?' · Her molada en fazla %80 hedeflendi':''}</div>`;
+      const disclaimer='<div class="routeWarn" style="margin-top:10px"><b>⚠ Bu plan bir tahmindir.</b> Hız, rüzgar, soğuk ve yük tüketimi artırır. Her zaman araç göstergesindeki menzile güven; şarjın <b>%15’in altına inmeden</b> şarj et. Yolda MolaVolt şarjını soracak, cevaplarsan plan güncellenir.</div>';
       let actionLabel=plan.stops.length?'Duraklı Google Haritalar rotasını aç':'Google Haritalar’da hedef rotasını aç'; if(lowSocProblem)actionLabel='Hedef rotasını aç';
-      if(out){out.innerHTML=`<div class="routeDirectCard ${lowSocProblem||roadUnverified?'warning':'ready'}"><h3>${lowSocProblem?'Güvenli rota bulunamadı':roadUnverified?'Tahmini rota':'Rota hazır'}</h3><p><b>${esc2(dest.name||q('rp_dest')?.value||'Hedef')}</b> için rota hesaplandı.</p><div class="routeMainSummary"><div><span>Durak</span><b>${plan.stops.length}</b></div><div><span>Şarj süresi</span><b>${plan.totalTimeText||Math.ceil(plan.totalMin)+' dk'}</b></div><div><span>Maliyet</span><b>${plan.totalCost.toFixed(0)} TL</b></div></div><p>Mesafe: <b>${distance.toFixed(0)} km</b> · Gerekli enerji: <b>${energyNeed.toFixed(1)} kWh</b> · Başlangıç enerji: <b>${startEnergy.toFixed(1)} kWh</b></p><p>Toplam şarj: <b>${plan.totalKwh.toFixed(1)} kWh</b></p>${effectHtml}${stopHtml}<div class="routeDirectActions"><a href="${url}" target="_blank" rel="noopener">${actionLabel}</a><button onclick="navigator.clipboard&&navigator.clipboard.writeText('${url.replaceAll("'","%27")}');routeToast('Rota linki kopyalandı')">Linki kopyala</button></div><div class="routeVersion" style="display:none">${ROUTE_FIX_VERSION}</div></div>`;}
+      if(out){out.innerHTML=`<div class="routeDirectCard ${lowSocProblem||roadUnverified?'warning':'ready'}"><h3>${lowSocProblem?'Güvenli rota bulunamadı':roadUnverified?'Tahmini rota':'Rota hazır'}</h3><p><b>${esc2(dest.name||q('rp_dest')?.value||'Hedef')}</b> için rota hesaplandı.</p><div class="routeMainSummary"><div><span>Durak</span><b>${plan.stops.length}</b></div><div><span>Şarj süresi</span><b>${plan.totalTimeText||Math.ceil(plan.totalMin)+' dk'}</b></div><div><span>Maliyet</span><b>${plan.totalCost.toFixed(0)} TL</b></div></div><p>Mesafe: <b>${distance.toFixed(0)} km</b> · Gerekli enerji: <b>${energyNeed.toFixed(1)} kWh</b> · Başlangıç enerji: <b>${startEnergy.toFixed(1)} kWh</b></p><p>Toplam şarj: <b>${plan.totalKwh.toFixed(1)} kWh</b></p>${effectHtml}${stopHtml}${disclaimer}<div class="routeDirectActions"><a href="${url}" target="_blank" rel="noopener">${actionLabel}</a><button onclick="navigator.clipboard&&navigator.clipboard.writeText('${url.replaceAll("'","%27")}');routeToast('Rota linki kopyalandı')">Linki kopyala</button></div><div class="routeVersion" style="display:none">${ROUTE_FIX_VERSION}</div></div>`;}
       busyOverlay(false);
       try{out&&out.scrollIntoView({behavior:'smooth',block:'start'})}catch(_){}
       toast(lowSocProblem?'Güvenli rota tamamlanamadı':roadUnverified?'Tahmini rota — kontrol gerekli':'Rota hazır.');
@@ -5414,7 +5465,7 @@ window.addEventListener('load',()=>{
           +`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">${prelim.altCount>1?`<button type="button" class="secondaryBtn" onclick="mvChangeRoute()">Güzergahı değiştir (${prelim.altCount} seçenek)</button>`:''}<button type="button" class="secondaryBtn" id="mvTrackBtn"></button></div><p class="muted" id="mvTrackInfo" style="font-size:12px;margin:6px 0 0"></p>
           <div style="margin-top:12px;padding:12px;border-radius:14px;border:1px solid var(--line)"><b style="font-size:14px">Yoldayken şarjını güncelle</b><p class="muted" style="font-size:12px;margin:4px 0 8px">Göstergedeki şarj yüzdesini yaz; gerçek tüketimini hesaplayıp molaları yeniden planlarız.</p><div style="display:flex;gap:8px"><input id="mvSocNow" type="number" inputmode="numeric" min="1" max="100" placeholder="Şarj %" style="flex:1;min-width:0"><button type="button" class="mvBtn primary" id="mvSocBtn">Güncelle</button></div></div>`;
         card.appendChild(tools);
-        mvTrip.prepare({points:prelim.points,dest,stops:plan.stops,battery,startEnergy:battery*soc/100,consumption,baseConsumption,distance});
+        mvTrip.prepare({points:prelim.points,dest,stops:plan.stops,battery,startEnergy:battery*soc/100,consumption,baseConsumption,distance,enteredConsumption});
         out.querySelectorAll('a[href*="google.com/maps/dir"]').forEach(link=>link.addEventListener('click',ev=>{mvTrip.start();const u=mvTrip.nativeUrl(link.href);if(u){ev.preventDefault();location.href=u}}));
         const socBtn=out.querySelector('#mvSocBtn');if(socBtn)socBtn.onclick=()=>mvTrip.checkIn(out.querySelector('#mvSocNow').value);
         out.querySelectorAll('.mvChargedBtn').forEach(b=>b.onclick=()=>mvTrip.askCharge(Number(b.dataset.i)));
